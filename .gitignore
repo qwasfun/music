@@ -1,0 +1,12 @@
+node_modules/
+dist/
+dist-worker/
+.wrangler/
+.dev.vars*
+.env*
+!.env.example
+output/
+*.log
+.cache/
+.pnpm-store/
+*.tsbuildinfo
