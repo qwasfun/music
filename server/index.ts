@@ -35,7 +35,6 @@ app.use('/api/*',async(c,next)=>{
   }
   c.set('userId',userId);
   c.header('Cache-Control','private, no-store'); c.header('X-Content-Type-Options','nosniff');
-  await c.env.DB.prepare('INSERT OR IGNORE INTO users(id) VALUES (?)').bind(userId).run();
   await next();
 });
 app.get('/api/auth/start',c=>c.redirect('/'));
@@ -55,8 +54,37 @@ async function getTrack(c: any): Promise<any> {
   const t=await c.env.DB.prepare('SELECT * FROM tracks WHERE id=? AND user_id=?').bind(c.req.param('id'),c.get('userId')).first();
   if(!t) return fail(404,'TRACK_NOT_FOUND','歌曲已不存在，请刷新曲库'); return t;
 }
+async function hashObject(bucket:R2Bucket,key:string):Promise<string|null> {
+  const object=await bucket.get(key);
+  if(!object)return null;
+  // Stream into Workers' digest extension instead of buffering up to 64 MiB per upload.
+  const digest=new (crypto as Crypto & {DigestStream:typeof DigestStream}).DigestStream('SHA-256');
+  await object.body.pipeTo(digest);
+  return Array.from(new Uint8Array(await digest.digest),byte=>byte.toString(16).padStart(2,'0')).join('');
+}
+async function findDuplicate(env:Env,userId:string,contentHash:string,size:number):Promise<Track|null> {
+  const lookup=()=>env.DB.prepare(`${trackSql} WHERE user_id=? AND content_hash=? AND size=?`).bind(userId,contentHash,size).first<Track>();
+  const existing=await lookup();
+  if(existing)return existing;
+  // Existing libraries have no fingerprints yet. Only inspect equal-size candidates,
+  // preserving their IDs, edited metadata, favorites and playlist membership.
+  const {results:candidates}=await env.DB.prepare('SELECT id,object_key FROM tracks WHERE user_id=? AND size=? AND content_hash IS NULL ORDER BY created_at,id').bind(userId,size).all<{id:string;object_key:string}>();
+  for(const candidate of candidates){
+    const hash=await hashObject(env.BUCKET,candidate.object_key);
+    if(!hash)continue;
+    // Old duplicates may already exist; retain them without violating the unique index.
+    await env.DB.prepare('UPDATE OR IGNORE tracks SET content_hash=? WHERE id=? AND user_id=? AND content_hash IS NULL').bind(hash,candidate.id,userId).run();
+    if(hash===contentHash){const match=await lookup();if(match)return match;}
+  }
+  return lookup();
+}
 app.post('/api/uploads',async c=>{
   const data=uploadSchema.parse(await c.req.json());
+  if(data.contentHash){
+    const existing=await findDuplicate(c.env,c.get('userId'),data.contentHash,data.size);
+    if(existing)return c.json({duplicate:true,track:{...existing,cover:!!existing.cover}});
+  }
+  await c.env.DB.prepare('INSERT OR IGNORE INTO users(id) VALUES (?)').bind(c.get('userId')).run();
   const id=crypto.randomUUID(), key=`audio/${c.get('userId')}/${id}`;
   const upload=await c.env.BUCKET.createMultipartUpload(key,{httpMetadata:{contentType:uploadMime(data.filename)}});
   try { await c.env.DB.prepare('INSERT INTO upload_sessions(id,user_id,r2_upload_id,object_key,metadata) VALUES (?,?,?,?,?)').bind(id,c.get('userId'),upload.uploadId,key,JSON.stringify(data)).run(); }
@@ -121,14 +149,26 @@ app.post('/api/uploads/:id/complete',async c=>{
   let object=await c.env.BUCKET.head(row.object_key);
   if(!object) object=await c.env.BUCKET.resumeMultipartUpload(row.object_key,row.r2_upload_id).complete(parts.map(p=>({partNumber:p.part_number,etag:p.etag})));
   if(object.size!==data.size) return fail(422,'UPLOAD_SIZE_MISMATCH','文件大小与提交信息不一致，请重新上传','file','音频文件');
-  let mime:string;
-  try { mime=await validateAudio(c.env.BUCKET,row.object_key,data.size,data.filename); }
+  let mime:string,contentHash:string;
+  try {
+    mime=await validateAudio(c.env.BUCKET,row.object_key,data.size,data.filename);
+    const hash=await hashObject(c.env.BUCKET,row.object_key);
+    if(!hash)throw new Error('MISSING_OBJECT');
+    contentHash=hash;
+    if(data.contentHash && data.contentHash!==contentHash)return fail(422,'UPLOAD_HASH_MISMATCH','文件内容与校验信息不一致，请重新选择音频文件上传','contentHash','音频文件','请重新选择音频文件上传');
+  }
   catch(e) { await c.env.BUCKET.delete(row.object_key); await c.env.DB.prepare('DELETE FROM upload_sessions WHERE id=?').bind(row.id).run(); throw e; }
-  await c.env.DB.batch([
-    c.env.DB.prepare('INSERT OR IGNORE INTO tracks(id,user_id,title,artist,album,duration,size,mime,object_key) VALUES (?,?,?,?,?,?,?,?,?)').bind(row.id,c.get('userId'),data.title,data.artist,data.album,data.duration,data.size,mime,row.object_key),
-    c.env.DB.prepare('DELETE FROM upload_sessions WHERE id=?').bind(row.id)
-  ]);
-  const track=await c.env.DB.prepare(`${trackSql} WHERE id=?`).bind(row.id).first(); return c.json({...track,cover:false},201);
+  const duplicate=await findDuplicate(c.env,c.get('userId'),contentHash,data.size);
+  if(!duplicate){
+    // The unique user/hash index also arbitrates simultaneous uploads from different devices.
+    await c.env.DB.prepare('INSERT OR IGNORE INTO tracks(id,user_id,title,artist,album,duration,size,mime,object_key,content_hash) VALUES (?,?,?,?,?,?,?,?,?,?)').bind(row.id,c.get('userId'),data.title,data.artist,data.album,data.duration,data.size,mime,row.object_key,contentHash).run();
+  }
+  const track=duplicate||await c.env.DB.prepare(`${trackSql} WHERE user_id=? AND content_hash=?`).bind(c.get('userId'),contentHash).first<Track>();
+  if(!track)throw new Error('MISSING_COMMITTED_TRACK');
+  const skipped=track.id!==row.id;
+  if(skipped)await c.env.BUCKET.delete(row.object_key);
+  await c.env.DB.prepare('DELETE FROM upload_sessions WHERE id=?').bind(row.id).run();
+  return c.json({...track,cover:!!track.cover,...(skipped?{duplicate:true}:{})},skipped?200:201);
 });
 app.delete('/api/uploads/:id',async c=>{ const row=await getUpload(c); try{await c.env.BUCKET.resumeMultipartUpload(row.object_key,row.r2_upload_id).abort();}catch{/* upload may already have completed */} await c.env.BUCKET.delete(row.object_key); await c.env.DB.prepare('DELETE FROM upload_sessions WHERE id=?').bind(row.id).run(); return c.json({ok:true}); });
 app.on(['GET','HEAD'],'/api/tracks/:id/audio',async c=>{
@@ -155,16 +195,22 @@ app.patch('/api/tracks/:id',async c=>{const t=await getTrack(c);const d=metadata
 app.delete('/api/tracks/:id',async c=>{const t=await getTrack(c);await c.env.BUCKET.delete([t.object_key,...(t.cover_key?[t.cover_key]:[])]);await c.env.DB.batch([c.env.DB.prepare('UPDATE playlists SET version=version+1 WHERE id IN (SELECT playlist_id FROM playlist_tracks WHERE track_id=?)').bind(t.id),c.env.DB.prepare('DELETE FROM tracks WHERE id=?').bind(t.id)]);return c.json({ok:true});});
 app.put('/api/favorites/:id',async c=>{await getTrack(c);await c.env.DB.prepare('INSERT OR IGNORE INTO favorites(user_id,track_id) VALUES (?,?)').bind(c.get('userId'),c.req.param('id')).run();return c.json({ok:true});});
 app.delete('/api/favorites/:id',async c=>{await c.env.DB.prepare('DELETE FROM favorites WHERE user_id=? AND track_id=?').bind(c.get('userId'),c.req.param('id')).run();return c.json({ok:true});});
-app.post('/api/playlists',async c=>{const d=playlistSchema.parse(await c.req.json()),id=crypto.randomUUID();await c.env.DB.prepare('INSERT INTO playlists(id,user_id,name) VALUES (?,?,?)').bind(id,c.get('userId'),d.name).run();return c.json({id,name:d.name,version:1,trackIds:[]},201);});
+app.post('/api/playlists',async c=>{const d=playlistSchema.parse(await c.req.json()),id=crypto.randomUUID();await c.env.DB.batch([c.env.DB.prepare('INSERT OR IGNORE INTO users(id) VALUES (?)').bind(c.get('userId')),c.env.DB.prepare('INSERT INTO playlists(id,user_id,name) VALUES (?,?,?)').bind(id,c.get('userId'),d.name)]);return c.json({id,name:d.name,version:1,trackIds:[]},201);});
 app.put('/api/playlists/:id',async c=>{
   const d=playlistSchema.extend({version:z.number().int().positive('请刷新歌单后重试'),trackIds:z.array(z.string().uuid('歌曲编号无效，请刷新曲库')).max(5000,'每张歌单最多 5000 首，请拆分歌单')}).parse(await c.req.json());
   const id=c.req.param('id'),uid=c.get('userId');
   if(new Set(d.trackIds).size!==d.trackIds.length)return fail(422,'DUPLICATE_TRACKS','同一首歌曲不能重复加入，请移除重复歌曲','trackIds','歌单歌曲');
-  const {results:owned}=await c.env.DB.prepare('SELECT id FROM tracks WHERE user_id=?').bind(uid).all<{id:string}>();const allowed=new Set(owned.map(t=>t.id));
-  if(d.trackIds.some(t=>!allowed.has(t)))return fail(422,'UNKNOWN_TRACK','部分歌曲已删除，请刷新曲库后重试','trackIds','歌单歌曲');
+  const ids=JSON.stringify(d.trackIds);
+  const invalid=await c.env.DB.prepare('SELECT value FROM json_each(?) WHERE NOT EXISTS (SELECT 1 FROM tracks WHERE id=value AND user_id=?) LIMIT 1').bind(ids,uid).first();
+  if(invalid)return fail(422,'UNKNOWN_TRACK','部分歌曲已删除，请刷新曲库后重试','trackIds','歌单歌曲');
   const token=crypto.randomUUID();
-  const queries=[c.env.DB.prepare('UPDATE playlists SET name=?,version=version+1,mutation_token=? WHERE id=? AND user_id=? AND version=?').bind(d.name,token,id,uid,d.version),c.env.DB.prepare('DELETE FROM playlist_tracks WHERE playlist_id=? AND EXISTS(SELECT 1 FROM playlists WHERE id=? AND mutation_token=?)').bind(id,id,token)];
-  for(let i=0;i<d.trackIds.length;i++)queries.push(c.env.DB.prepare('INSERT INTO playlist_tracks(playlist_id,track_id,position) SELECT ?,?,? WHERE EXISTS(SELECT 1 FROM playlists WHERE id=? AND mutation_token=?)').bind(id,d.trackIds[i],i,id,token));
+  // One transaction, with the version token guarding every member change.
+  // UPSERT's WHERE clause avoids rewriting unchanged playlist positions.
+  const queries=[
+    c.env.DB.prepare('UPDATE playlists SET name=?,version=version+1,mutation_token=? WHERE id=? AND user_id=? AND version=?').bind(d.name,token,id,uid,d.version),
+    c.env.DB.prepare('DELETE FROM playlist_tracks WHERE playlist_id=? AND track_id NOT IN (SELECT value FROM json_each(?)) AND EXISTS(SELECT 1 FROM playlists WHERE id=? AND mutation_token=?)').bind(id,ids,id,token),
+    c.env.DB.prepare('INSERT INTO playlist_tracks(playlist_id,track_id,position) SELECT ?,value,CAST(key AS INTEGER) FROM json_each(?) WHERE EXISTS(SELECT 1 FROM playlists WHERE id=? AND mutation_token=?) ON CONFLICT(playlist_id,track_id) DO UPDATE SET position=excluded.position WHERE playlist_tracks.position<>excluded.position').bind(id,ids,id,token)
+  ];
   const result=await c.env.DB.batch(queries);
   if(!result[0].meta.changes)return fail(409,'PLAYLIST_CONFLICT','歌单已在其他设备修改，请刷新后重试','version','歌单版本','刷新歌单后重新操作');
   return c.json({id,name:d.name,version:d.version+1,trackIds:d.trackIds});

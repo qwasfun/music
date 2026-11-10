@@ -1,7 +1,7 @@
-import {uploadSchema,validationError,PART_SIZE,type Track} from '../shared/contracts';
+import {uploadSchema,validationError,PART_SIZE,type Track,type UploadStartResult,type UploadCompleteResult} from '../shared/contracts';
 import {api,RequestError} from './api';
 import {readUploadMetadata,AudioMetadataReadError} from './audio-metadata';
-export interface UploadJob {key:string;file:File;status:'queued'|'uploading'|'done'|'error'|'canceled';progress:number;message?:string;controller:AbortController}
+export interface UploadJob {key:string;file:File;status:'queued'|'uploading'|'done'|'skipped'|'error'|'canceled';progress:number;message?:string;controller:AbortController}
 export async function extractCover(data:Uint8Array,mime:string):Promise<Blob>{
   const image=await createImageBitmap(new Blob([data.slice().buffer],{type:mime}));
   const scale=Math.min(1,512/Math.max(image.width,image.height));const canvas=document.createElement('canvas');canvas.width=Math.max(1,Math.round(image.width*scale));canvas.height=Math.max(1,Math.round(image.height*scale));canvas.getContext('2d')!.drawImage(image,0,0,canvas.width,canvas.height);image.close();
@@ -20,8 +20,9 @@ async function uploadPart(id:string,n:number,blob:Blob,signal:AbortSignal,onProg
     });return;}catch(e){if(signal.aborted||(e instanceof RequestError&&e.status>=400&&e.status<500)||attempt===2)throw e;await new Promise(r=>setTimeout(r,500*(attempt+1)));}
   }
 }
-export async function uploadFile(job:UploadJob,onChange:()=>void):Promise<Track>{
+export async function uploadFile(job:UploadJob,onChange:()=>void):Promise<Track|undefined>{
   const signal=job.controller.signal;let sessionId:string|undefined;
+  const skip=()=>{job.status='skipped';job.progress=1;job.message='歌曲已存在，已跳过';onChange();};
   try{
     job.status='uploading';job.message='正在读取音频资料';onChange();
     const preliminary=uploadSchema.safeParse({filename:job.file.name,size:job.file.size,title:job.file.name.replace(/\.[^.]+$/,''),duration:1});if(!preliminary.success)throw new Error(validationError(preliminary.error).error.message);
@@ -29,7 +30,13 @@ export async function uploadFile(job:UploadJob,onChange:()=>void):Promise<Track>
     const payload=uploadSchema.safeParse({filename:job.file.name,size:job.file.size,title:metadata.common.title||job.file.name.replace(/\.[^.]+$/,''),artist:metadata.common.artist||'',album:metadata.common.album||'',duration});
     if(!payload.success)throw new Error(validationError(payload.error).error.message);
     if(signal.aborted)throw new DOMException('Canceled','AbortError');
-    const session=await api<{id:string;partSize:number}>('/uploads',{method:'POST',body:JSON.stringify(payload.data),signal});sessionId=session.id;
+    job.message='正在检查歌曲是否已存在';onChange();
+    const digest=await crypto.subtle.digest('SHA-256',await job.file.arrayBuffer());
+    const contentHash=Array.from(new Uint8Array(digest),byte=>byte.toString(16).padStart(2,'0')).join('');
+    if(signal.aborted)throw new DOMException('Canceled','AbortError');
+    const session=await api<UploadStartResult>('/uploads',{method:'POST',body:JSON.stringify({...payload.data,contentHash}),signal});
+    if(session.duplicate){skip();return;}
+    sessionId=session.id;
     const count=Math.ceil(job.file.size/PART_SIZE);
     for(let i=0;i<count;i++){
       job.message=`正在上传 ${i+1} / ${count} 个分片`;onChange();
@@ -37,8 +44,9 @@ export async function uploadFile(job:UploadJob,onChange:()=>void):Promise<Track>
       await uploadPart(session.id,i+1,job.file.slice(start,end),signal,value=>{job.progress=(start+(end-start)*value)/job.file.size;onChange();});
     }
     job.message='正在校验完整文件';onChange();
-    const track=await api<Track>(`/uploads/${session.id}/complete`,{method:'POST',signal});sessionId=undefined;
-    const pic=metadata.common.picture?.[0];if(pic&&!signal.aborted){try{job.message='正在保存专辑封面';onChange();const cover=await extractCover(pic.data,pic.format);await api(`/tracks/${track.id}/cover`,{method:'PUT',body:cover,signal});}catch{job.message='歌曲已上传，封面未保存';}}
+    const track=await api<UploadCompleteResult>(`/uploads/${session.id}/complete`,{method:'POST',signal});sessionId=undefined;
+    if(track.duplicate){skip();return;}
+    const pic=metadata.common.picture?.[0];if(pic&&!signal.aborted){try{job.message='正在保存专辑封面';onChange();const cover=await extractCover(pic.data,pic.format);await api(`/tracks/${track.id}/cover`,{method:'PUT',body:cover,signal});track.cover=true;}catch{job.message='歌曲已上传，封面未保存';}}
     job.status='done';job.progress=1;if(job.message!=='歌曲已上传，封面未保存')job.message='已加入你的曲库';onChange();return track;
   }catch(e){if(sessionId)try{await api(`/uploads/${sessionId}`,{method:'DELETE'});}catch{}job.status=signal.aborted?'canceled':'error';job.message=signal.aborted?'已取消上传':(e as Error).message;onChange();throw e;}
 }

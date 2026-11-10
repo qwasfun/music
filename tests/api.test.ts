@@ -1,11 +1,11 @@
 import {beforeAll,afterAll,describe,it,expect} from 'vitest';
 import {Miniflare} from 'miniflare';
-import {readFileSync} from 'node:fs';
+import {readFileSync,readdirSync} from 'node:fs';
 import {PART_SIZE} from '../shared/contracts';
 import {createFlacFixture} from './fixtures/flac.mjs';
 import {createOggContainerFixture} from './fixtures/ogg';
 let mf:Miniflare;
-beforeAll(async()=>{mf=new Miniflare({modules:true,scriptPath:'dist-worker/index.js',compatibilityDate:'2026-07-01',d1Databases:{DB:'test-db'},r2Buckets:['BUCKET'],bindings:{DEV_AUTH:'local-only',APP_ORIGIN:'http://localhost',ACCESS_AUD:'test',ACCESS_TEAM_DOMAIN:'https://test.cloudflareaccess.com',OWNER_EMAIL:'owner@example.invalid'}});const db=await mf.getD1Database('DB');await db.exec(readFileSync('migrations/0001_initial.sql','utf8'));});
+beforeAll(async()=>{mf=new Miniflare({modules:true,scriptPath:'dist-worker/index.js',compatibilityDate:'2026-07-01',d1Databases:{DB:'test-db'},r2Buckets:['BUCKET'],bindings:{DEV_AUTH:'local-only',APP_ORIGIN:'http://localhost',ACCESS_AUD:'test',ACCESS_TEAM_DOMAIN:'https://test.cloudflareaccess.com',OWNER_EMAIL:'owner@example.invalid'}});const db=await mf.getD1Database('DB');for(const file of readdirSync('migrations').filter(file=>file.endsWith('.sql')).sort())await db.exec(readFileSync(`migrations/${file}`,'utf8'));});
 afterAll(async()=>{await mf?.dispose();});
 async function request(path:string,method='GET',body?:unknown,headers:Record<string,string>={}){return mf.dispatchFetch(`http://localhost/api${path}`,{method,headers:{...(body instanceof Uint8Array?{'Content-Length':String(body.length)}:body?{'Content-Type':'application/json'}:{}),...headers},body:body instanceof Uint8Array?body:body?JSON.stringify(body):undefined});}
 async function upload(bytes:Uint8Array,title='Test song',filename='tone.mp3'){

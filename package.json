@@ -10,6 +10,7 @@
     "check": "tsc -b",
     "test": "vitest run",
     "test:e2e": "node tests/browser.mjs",
+    "test:capacity": "node tests/capacity-browser.mjs",
     "db:local": "wrangler d1 migrations apply DB --local",
     "deploy": "pnpm build && wrangler deploy",
     "icons": "node scripts/icons.mjs",
@@ -17,6 +18,7 @@
     "test:ogg": "node tests/ogg-browser.mjs"
   },
   "dependencies": {
+    "@tanstack/react-virtual": "^3.14.26",
     "hono": "^4.10.0",
     "idb": "^8.0.3",
     "jose": "^6.1.0",

@@ -18,6 +18,27 @@ beforeEach(async()=>{await downloads.logout();cache.failQuota=false;cache.values
 afterAll(async()=>{await downloads.logout();vi.unstubAllGlobals();});
 const waitDone=()=>vi.waitFor(()=>expect(downloads.snapshot().tasks.some(t=>t.status==='downloading')).toBe(false));
 describe('complete-file downloader',()=>{
+  it('keeps download progress out of the library snapshot',async()=>{
+    let controller!:ReadableStreamDefaultController<Uint8Array>;
+    const stream=new ReadableStream<Uint8Array>({start(value){controller=value;}});
+    const fetcher=vi.fn(async()=>new Response(stream,{headers:{'Content-Type':'audio/mpeg','Content-Length':'4'}}));vi.stubGlobal('fetch',fetcher);
+    await downloads.enqueue('one');await vi.waitFor(()=>expect(fetcher).toHaveBeenCalledTimes(1));
+    const overview=downloads.overviewSnapshot();controller.enqueue(new Uint8Array(2));
+    await vi.waitFor(()=>expect(downloads.snapshot().tasks[0]?.progress).toBe(.5));expect(downloads.overviewSnapshot()).toBe(overview);
+    controller.enqueue(new Uint8Array(2));controller.close();await vi.waitFor(()=>expect(downloads.entries.has('one')).toBe(true));expect(downloads.overviewSnapshot()).not.toBe(overview);
+  });
+  it('checks at most four files concurrently and removes missing cache entries',async()=>{
+    const tracks=Array.from({length:8},(_,i)=>({...library.tracks[0],id:`check-${i}`}));downloads.setLibrary({...library,tracks});
+    for(const track of tracks){stores.entries.set(track.id,{id:track.id,size:4,pinned:true,lastUsed:0});if(track.id!=='check-7')await cache.put(audioUrl(track.id),new Response(new Uint8Array(4),{headers:{'Content-Length':'4'}}));}
+    let release!:()=>void;const gate=new Promise<void>(resolve=>{release=resolve;});let active=0,peak=0;const original=cache.match.bind(cache);
+    const spy=vi.spyOn(cache,'match').mockImplementation(async input=>{active++;peak=Math.max(peak,active);await gate;active--;return original(input);});
+    try{const checking=downloads.init();await vi.waitFor(()=>expect(active).toBe(4));expect(downloads.snapshot().checking).toBe(true);release();await checking;expect(peak).toBe(4);expect(downloads.entries.size).toBe(7);expect(stores.entries.has('check-7')).toBe(false);expect(downloads.snapshot().checking).toBe(false);}finally{release();spy.mockRestore();}
+  });
+  it('does not restore cache state when logout happens during reconciliation',async()=>{
+    stores.entries.set('one',{id:'one',size:4,pinned:true,lastUsed:0});await cache.put(audioUrl('one'),new Response(new Uint8Array(4),{headers:{'Content-Length':'4'}}));
+    let release!:()=>void;const gate=new Promise<void>(resolve=>{release=resolve;});const original=cache.match.bind(cache);const spy=vi.spyOn(cache,'match').mockImplementation(async input=>{const result=await original(input);await gate;return result;});
+    try{const checking=downloads.init();await vi.waitFor(()=>expect(spy).toHaveBeenCalled());await downloads.logout();release();await checking;expect(downloads.entries.size).toBe(0);expect(downloads.snapshot().checking).toBe(false);expect(downloads.snapshot().available).toBe(false);expect(stores.entries.size).toBe(0);}finally{release();spy.mockRestore();}
+  });
   it('marks a file ready only after all expected bytes are stored',async()=>{vi.stubGlobal('fetch',vi.fn(async()=>new Response(new Uint8Array(4),{headers:{'Content-Type':'audio/mpeg','Content-Length':'4'}})));await downloads.enqueue('one');await vi.waitFor(()=>expect(downloads.entries.has('one')).toBe(true));expect((await cache.match(audioUrl('one')))?.status).toBe(200);expect(stores.entries.get('one').pinned).toBe(true);});
   it('rejects truncated downloads and removes partial cache data',async()=>{vi.stubGlobal('fetch',vi.fn(async()=>new Response(new Uint8Array(3),{headers:{'Content-Type':'audio/mpeg','Content-Length':'4'}})));await downloads.enqueue('one');await vi.waitFor(()=>expect(downloads.snapshot().tasks[0]?.status).toBe('error'));expect(downloads.entries.has('one')).toBe(false);expect(await cache.match(audioUrl('one'))).toBeUndefined();expect(downloads.snapshot().tasks[0].error).toContain('下载未完成');});
   it('does not cache a login HTML page as audio',async()=>{vi.stubGlobal('fetch',vi.fn(async()=>new Response('<html>login</html>',{headers:{'Content-Type':'text/html','Content-Length':'18'}})));await downloads.enqueue('one');await vi.waitFor(()=>expect(downloads.snapshot().tasks[0]?.status).toBe('error'));expect(downloads.entries.size).toBe(0);expect(cache.values.size).toBe(0);});

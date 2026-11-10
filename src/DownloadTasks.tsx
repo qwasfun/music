@@ -1,0 +1,5 @@
+import {useSyncExternalStore} from 'react';
+import {CloudDownload,LoaderCircle,X} from 'lucide-react';
+import type {Track} from '../shared/contracts';
+import {downloads} from './cache';
+export function DownloadTasks({tracksById}:{tracksById:Map<string,Track>}){const cache=useSyncExternalStore(downloads.subscribe,downloads.snapshot);return cache.tasks.length?<div className="download-tasks">{cache.tasks.map(t=><div className="download-task" key={t.id}><span>{t.status==='downloading'?<LoaderCircle className="spin" size={18}/>:<CloudDownload size={18}/>}</span><div><strong>{tracksById.get(t.id)?.title||'下载任务'}</strong><small className={t.status==='error'?'error-text':''}>{t.error|| (t.status==='queued'?'等待下载':`正在下载 ${Math.round((t.progress||0)*100)}%`)}</small>{t.status==='downloading'&&<div className="meter"><i style={{width:`${(t.progress||0)*100}%`}}/></div>}</div>{t.status==='error'&&<button className="text-button" onClick={()=>void downloads.enqueue(t.id,t.pinned)}>重试</button>}<button className="icon-button" aria-label="取消下载" onClick={()=>void downloads.cancel(t.id)}><X size={16}/></button></div>)}</div>:null;}

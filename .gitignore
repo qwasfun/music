@@ -6,6 +6,7 @@ dist-worker/
 .env*
 !.env.example
 output/
+.playwright-cli/
 *.log
 .cache/
 .pnpm-store/

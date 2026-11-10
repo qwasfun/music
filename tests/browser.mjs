@@ -1,13 +1,14 @@
 import assert from 'node:assert/strict';
 import {readFile,mkdir,writeFile} from 'node:fs/promises';
 import {resolve} from 'node:path';
+import {uniqueMp3} from './fixtures/mp3.mjs';
 process.env.PLAYWRIGHT_BROWSERS_PATH ||= resolve('.cache/browsers');
 const {chromium,webkit}=await import('playwright');
 const base=process.env.TEST_BASE_URL||'http://127.0.0.1:4173';
 await mkdir('output/playwright',{recursive:true});
 const buffer=await readFile('output/fixtures/test-tone.mp3');const aacBuffer=await readFile('output/fixtures/test-aac.m4a');
 const results=[];
-async function serverUpload(name){const res=await fetch(`${base}/api/uploads`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({title:name,filename:`${name}.mp3`,artist:'余音测试',album:'浏览器验收',duration:18,size:buffer.length})});assert.equal(res.status,201);const {id}=await res.json();const part=await fetch(`${base}/api/uploads/${id}/parts/1`,{method:'PUT',body:buffer});assert.equal(part.status,200);const complete=await fetch(`${base}/api/uploads/${id}/complete`,{method:'POST'});assert.equal(complete.status,201);return await complete.json();}
+async function serverUpload(name){const audio=uniqueMp3(buffer,name);const res=await fetch(`${base}/api/uploads`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({title:name,filename:`${name}.mp3`,artist:'余音测试',album:'浏览器验收',duration:18,size:audio.length})});assert.equal(res.status,201);const {id}=await res.json();const part=await fetch(`${base}/api/uploads/${id}/parts/1`,{method:'PUT',body:audio});assert.equal(part.status,200);const complete=await fetch(`${base}/api/uploads/${id}/complete`,{method:'POST'});assert.equal(complete.status,201);return await complete.json();}
 async function seek(page,seconds){await page.getByRole('slider',{name:'播放进度',exact:true}).evaluate((el,value)=>{const set=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set;set.call(el,String(value));el.dispatchEvent(new Event('input',{bubbles:true}));el.dispatchEvent(new Event('change',{bubbles:true}));},seconds);}
 for(const [name,engine,launch] of [['chromium',chromium,{channel:'chrome',headless:true}],['webkit',webkit,{headless:true}]]){
   let browser;const started=Date.now();const failures=[];const checks=[];const ids=[];let testPlaylistName;
@@ -29,7 +30,7 @@ for(const [name,engine,launch] of [['chromium',chromium,{channel:'chrome',headle
     await page.getByRole('button',{name:'新建歌单',exact:true}).click();await page.getByRole('button',{name:'保存',exact:true}).click();await page.getByText('歌单名称：不能为空',{exact:false}).waitFor();
     const playlistName=`傍晚歌单-${name}-${Date.now()}`;testPlaylistName=playlistName;await page.getByRole('textbox',{name:'歌单名称',exact:true}).fill(playlistName);await page.getByRole('button',{name:'保存',exact:true}).click();await page.getByRole('heading',{name:playlistName,exact:false}).waitFor();checks.push('playlist creation with actionable field validation');
     await page.getByRole('button',{name:'我的曲库',exact:true}).first().click();await row().getByRole('button',{name:`喜欢 ${prefix}`,exact:true}).click();await row().getByRole('button',{name:`取消喜欢 ${prefix}`,exact:true}).waitFor();
-    await row().locator('summary').click();await row().getByRole('button',{name:'添加到歌单',exact:true}).click();await page.locator('.playlist-picker').getByRole('button').filter({hasText:playlistName}).click();await page.getByText('已添加到歌单',{exact:true}).waitFor();
+    await row().getByRole('button',{name:prefix+' 更多操作',exact:true}).click();await page.getByRole('menuitem',{name:'添加到歌单',exact:true}).click();await page.locator('.playlist-picker').getByRole('button').filter({hasText:playlistName}).click();await page.getByText('已添加到歌单',{exact:true}).waitFor();
     const other=await browser.newContext({viewport:{width:1280,height:900}});const otherPage=await other.newPage();await otherPage.goto(base);await otherPage.getByRole('button').filter({hasText:playlistName}).first().click();await otherPage.getByRole('row').filter({hasText:prefix}).waitFor();await other.close();checks.push('independent browser context sees cloud playlist and songs');
     const auto=await serverUpload(`${prefix}-自动`),uncached=await serverUpload(`${prefix}-未缓存`);ids.push(auto.id,uncached.id);await page.getByRole('button',{name:'刷新云端曲库',exact:true}).click();await page.getByRole('row').filter({hasText:uncached.title}).waitFor();
     await page.getByRole('button',{name:'偏好设置',exact:true}).click();await page.getByRole('switch',{name:'播放时自动缓存'}).click();await page.waitForFunction(()=>document.querySelector('[role=switch]').getAttribute('aria-checked')==='true');
