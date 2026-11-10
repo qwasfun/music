@@ -10,6 +10,7 @@
 - 桌面测试直接激活实际发布样式中的 standalone 规则，并注入安全区变量；不等同于运行 iOS 主屏幕应用，也不能验证系统合成器的模糊是否消失。实际 iOS 27 冷启动、回弹、搜索键盘、后台恢复与离线启动仍待真机验收。
 - 2000 首曲库在 Chromium / WebKit 各通过 8 项回归；首屏均挂载 14 行。Chromium 四倍 CPU 降速的搜索 P95 为 13.1ms，WebKit 为 5ms；播放期间列表 DOM 更新均为 0。这些是本机合成资料的结果。
 - 本次未修改 Worker/API、数据库迁移、播放与上传逻辑、IndexedDB 或音乐缓存协议。输出位于 `output/playwright/pwa-layout-results.json`、`results.json`、`dedup-results.json`、`capacity-results.json` 和 `batch-upload-results.json`。
+- 已部署 Worker `c2a273af-8dfb-40b6-a3e8-fdbf968f0467`。12 项线上检查通过，26 个静态文件逐个核对 SHA-256 与本地构建一致；新脚本和样式已纳入预缓存。未登录线上私人曲库或上传测试音乐，登录后的真实 iPhone 行为仍待真机验收。
 
 真机复核步骤：更新应用 → 从主屏幕冷启动 → 滚动与顶部回弹 → 聚焦搜索并收起键盘 → 打开/收起播放器 → 打开菜单与上传弹窗 → 横屏 → 切后台恢复 → 飞行模式下重新打开并播放已下载歌曲。记录设备、iOS 版本和截图，再确认系统模糊的最终效果。
 
