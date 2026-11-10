@@ -33,3 +33,9 @@
 FLAC 文件上传、资料/封面读取、在线播放与离线缓存已发布。Worker 版本为 `1c9dce9c-9caf-4268-9bad-051fe74b3908`，无需数据库迁移。新前端文件选择和共享校验包含 `.flac`、`audio/flac`；R2 与音频响应使用 `audio/flac`。`OWNER_EMAIL` Secret 保留，沿用现有 Access、D1 和 R2 资源。
 
 已打开应用的用户需刷新页面，并在出现新版本提示时选择「立即更新」，以加载新的格式选择入口；原有音乐缓存会保留。详细兼容性与测试范围见验收记录。
+
+## 2026-11-10：OGG 更新
+
+OGG（Vorbis / Opus）的上传、资料读取、在线播放、完整下载和离线播放已发布。Worker 版本为 `06ffa079-6c20-406f-b90a-62ed6ab1714b`，未新增云资源或数据库迁移。R2 和音频响应使用 `audio/ogg`，原有登录邮箱 Secret、Access 保护、曲库和缓存协议保留。
+
+75 项自动测试、Chromium 的两种 OGG 编码各 8 项专项检查、Chromium/WebKit 各 18 项原有功能回归，以及 12 项线上检查通过。线上前端资源已确认包含 `.ogg` 文件入口和 Vorbis/Opus 格式说明。真实 iPhone 仍待验收，所需 Safari/iOS 版本见 README。

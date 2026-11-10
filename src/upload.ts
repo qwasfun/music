@@ -24,7 +24,7 @@ export async function uploadFile(job:UploadJob,onChange:()=>void):Promise<Track>
   try{
     job.status='uploading';job.message='正在读取音频资料';onChange();
     const preliminary=uploadSchema.safeParse({filename:job.file.name,size:job.file.size,title:job.file.name.replace(/\.[^.]+$/,''),duration:1});if(!preliminary.success)throw new Error(validationError(preliminary.error).error.message);
-    let metadata;try{const {parseBlob}=await import('music-metadata');metadata=await parseBlob(job.file);}catch{throw new Error('音频文件：无法读取音乐资料，请选择有效的 MP3、AAC 编码 M4A 或 FLAC 文件');}
+    let metadata;try{const {parseBlob}=await import('music-metadata');metadata=await parseBlob(job.file);}catch{throw new Error('音频文件：无法读取音乐资料，请选择有效的 MP3、AAC 编码 M4A、FLAC 或 OGG（Vorbis / Opus）文件');}
     const payload=uploadSchema.safeParse({filename:job.file.name,size:job.file.size,title:metadata.common.title||job.file.name.replace(/\.[^.]+$/,''),artist:metadata.common.artist||'',album:metadata.common.album||'',duration:metadata.format.duration||0});
     if(!payload.success)throw new Error(validationError(payload.error).error.message);
     if(signal.aborted)throw new DOMException('Canceled','AbortError');

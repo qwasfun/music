@@ -13,7 +13,8 @@
     "db:local": "wrangler d1 migrations apply DB --local",
     "deploy": "pnpm build && wrangler deploy",
     "icons": "node scripts/icons.mjs",
-    "fixtures": "node scripts/fixture.mjs && node scripts/aac-fixture.mjs"
+    "fixtures": "node scripts/fixture.mjs && node scripts/aac-fixture.mjs && node scripts/ogg-fixture.mjs",
+    "test:ogg": "node tests/ogg-browser.mjs"
   },
   "dependencies": {
     "hono": "^4.10.0",

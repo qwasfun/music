@@ -9,7 +9,7 @@ export const metadataSchema = z.object({
   album: z.string().trim().max(160, '最多填写 160 个字符').default(''),
 });
 export const uploadSchema = metadataSchema.extend({
-  filename: z.string().min(1, '请选择音频文件').max(255, '文件名最多 255 个字符').regex(/\.(mp3|m4a|flac)$/i, '仅支持 MP3、AAC 编码的 M4A 和 FLAC；请转换格式后重新上传'),
+  filename: z.string().min(1, '请选择音频文件').max(255, '文件名最多 255 个字符').regex(/\.(mp3|m4a|flac|ogg)$/i, '仅支持 MP3、AAC 编码的 M4A、FLAC 和 OGG（Vorbis / Opus）；请转换格式后重新上传'),
   size: z.number().int().positive('文件不能为空；请选择有效音频').max(MAX_FILE, '单文件最多 64 MiB；请压缩或裁剪后重新上传'),
   duration: z.number().positive('无法读取时长；请选择可播放的音频').max(86400, '音频最长 24 小时'),
 });
@@ -28,7 +28,7 @@ export interface CacheEntry { id: string; size: number; pinned: boolean; lastUse
 export interface DownloadTask { id: string; pinned: boolean; status: 'queued' | 'downloading' | 'error'; error?: string }
 export const audioUrl = (id: string) => `/api/tracks/${encodeURIComponent(id)}/audio`;
 export const coverUrl = (id: string) => `/api/tracks/${encodeURIComponent(id)}/cover`;
-export function uploadMime(filename: string) { const extension=filename.toLowerCase().split('.').pop(); return extension==='flac'?'audio/flac':extension==='mp3'?'audio/mpeg':'audio/mp4'; }
+export function uploadMime(filename: string) { const extension=filename.toLowerCase().split('.').pop(); return extension==='ogg'?'audio/ogg':extension==='flac'?'audio/flac':extension==='mp3'?'audio/mpeg':'audio/mp4'; }
 export function formatBytes(n: number) { return n >= 1024 ** 3 ? `${(n / 1024 ** 3).toFixed(1)} GB` : `${(n / 1024 ** 2).toFixed(1)} MB`; }
 export function formatTime(n: number) { if (!Number.isFinite(n)) return '0:00'; return `${Math.floor(n / 60)}:${String(Math.floor(n % 60)).padStart(2, '0')}`; }
 export function evictionPlan(entries: CacheEntry[], incoming: number, limit: number): { remove: string[]; shortage: number } {

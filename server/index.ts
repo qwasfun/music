@@ -3,6 +3,7 @@ import { verifyIdentity } from './auth';
 import { z } from 'zod';
 import { metadataSchema, uploadSchema, playlistSchema, validationError, uploadMime, PART_SIZE, type Track } from '../shared/contracts';
 import { validateFlac } from './flac';
+import { validateOgg } from './ogg';
 import { parseRange } from './range';
 
 type Env = { DB: D1Database; BUCKET: R2Bucket; ASSETS: Fetcher; APP_ORIGIN: string; ACCESS_TEAM_DOMAIN: string; ACCESS_AUD: string; OWNER_EMAIL: string; DEV_AUTH?: string };
@@ -78,6 +79,11 @@ app.put('/api/uploads/:id/parts/:part',async c=>{
 });
 async function readBytes(bucket:R2Bucket,key:string,offset:number,length:number) { const object=await bucket.get(key,{range:{offset,length}}); if(!object) throw new Error('MISSING_OBJECT'); return new Uint8Array(await object.arrayBuffer()); }
 export async function validateAudio(bucket:R2Bucket,key:string,size:number,filename:string):Promise<string> {
+  if(filename.toLowerCase().endsWith('.ogg')) {
+    try { await validateOgg((offset,length)=>readBytes(bucket,key,offset,length),size); }
+    catch(e) { return fail(422,'INVALID_AUDIO',(e as Error).message,'file','音频文件','请重新导出完整的 Vorbis 或 Opus 编码 OGG 文件后上传'); }
+    return 'audio/ogg';
+  }
   if(filename.toLowerCase().endsWith('.flac')) {
     try { await validateFlac((offset,length)=>readBytes(bucket,key,offset,length),size); }
     catch(e) { return fail(422,'INVALID_AUDIO',(e as Error).message,'file','音频文件','请重新导出有效的 FLAC 文件后上传'); }

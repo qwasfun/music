@@ -1,0 +1,20 @@
+import {describe,it,expect} from 'vitest';
+import {validateOgg} from '../server/ogg';
+import {oggPage,oggIdentification,createOggContainerFixture} from './fixtures/ogg';
+const validate=(b:Uint8Array)=>validateOgg(async(offset,length)=>b.slice(offset,offset+length),b.length);
+const join=(...parts:Uint8Array[])=>{const out=new Uint8Array(parts.reduce((s,p)=>s+p.length,0));let offset=0;for(const p of parts){out.set(p,offset);offset+=p.length;}return out;};
+describe('Ogg audio validation',()=>{
+  it.each(['vorbis','opus']as const)('recognizes %s identification headers',async codec=>expect(await validate(createOggContainerFixture(codec))).toBe(codec));
+  it('rejects a renamed non-Ogg file',async()=>expect(validate(new Uint8Array(100))).rejects.toThrow('OGG 文件标识'));
+  it('rejects a truncated header',async()=>expect(validate(new Uint8Array(20))).rejects.toThrow('OGG 文件不完整'));
+  it('rejects an invalid Ogg version',async()=>{const b=createOggContainerFixture('vorbis');b[4]=1;await expect(validate(b)).rejects.toThrow('页头');});
+  it('rejects a missing beginning-of-stream marker',async()=>expect(validate(join(oggPage(oggIdentification('opus'),0),oggPage(new Uint8Array([0]),4,1)))).rejects.toThrow('起始页'));
+  it('rejects a corrupt identification-page checksum',async()=>{const b=createOggContainerFixture('vorbis');b[22]^=1;await expect(validate(b)).rejects.toThrow('识别页校验');});
+  it('rejects video or other unsupported Ogg streams',async()=>{const packet=new TextEncoder().encode('\u0080theora-video');await expect(validate(createOggContainerFixture('opus',packet))).rejects.toThrow('仅支持 Vorbis 和 Opus');});
+  it('rejects invalid Vorbis sample parameters',async()=>{const p=oggIdentification('vorbis');p[11]=0;await expect(validate(createOggContainerFixture('vorbis',p))).rejects.toThrow('Vorbis 采样参数');});
+  it('rejects a missing Vorbis framing bit',async()=>{const p=oggIdentification('vorbis');p[29]=0;await expect(validate(createOggContainerFixture('vorbis',p))).rejects.toThrow('Vorbis 采样参数');});
+  it('rejects invalid Opus channel mapping',async()=>{const p=oggIdentification('opus');p[9]=3;await expect(validate(createOggContainerFixture('opus',p))).rejects.toThrow('Opus 声道配置');});
+  it('rejects corrupt or missing end pages',async()=>{const head=oggPage(oggIdentification('vorbis'),2),last=oggPage(new Uint8Array(100),4,1);const corrupt=join(head,last);corrupt[corrupt.length-1]^=1;await expect(validate(corrupt)).rejects.toThrow('结束页');await expect(validate(join(head,last.slice(0,-1)))).rejects.toThrow('结束页');});
+  it('accepts an empty EOS page',async()=>expect(await validate(join(oggPage(oggIdentification('vorbis'),2),oggPage(null,4,1)))).toBe('vorbis'));
+  it('bounds reads instead of buffering the whole song',async()=>{const b=join(oggPage(oggIdentification('vorbis'),2),oggPage(new Uint8Array(40000),0,1),oggPage(new Uint8Array(40000),0,2),oggPage(new Uint8Array([0]),4,3));const reads:{offset:number;length:number}[]=[];await validateOgg(async(offset,length)=>{reads.push({offset,length});return b.slice(offset,offset+length);},b.length);expect(reads).toHaveLength(3);expect(reads.every(r=>r.length<=65307)).toBe(true);expect(reads[2].offset).toBeGreaterThan(0);});
+});

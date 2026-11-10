@@ -40,3 +40,13 @@ Chromium（本机 Chrome）与桌面 WebKit 各通过 18 个场景：PWA 注册�
 - Chromium 完成 16 位/44.1 kHz、24 位/96 kHz 的上传、歌曲资料、封面、实际解码播放、下载、断网刷新、拖动、离线 Range 和缓存 SHA-256 原始字节一致性验证。专项输出：`output/playwright/flac-results.json`。
 - Windows WebKit 对官方 `sfx.flac` 对照样本也无法完成实际解码，尽管 `canPlayType` 返回支持；专项脚本将该内核标记为未测试，不将它作为 Safari FLAC 已通过的证据。实际 iPhone Safari 验收仍待完成。
 - 单文件 64 MiB 上限和每台设备独立缓存的规则保持不变，无数据库迁移。
+
+## 2026-11-10：OGG 支持
+
+- 支持 `.ogg` 文件，音频编码为 Vorbis 或 Opus。前后端共用格式校验，音频存储与响应 MIME 为 `audio/ogg`，原文件不转码。
+- 后端依据 [RFC 3533](https://www.rfc-editor.org/rfc/rfc3533.html)、[RFC 7845](https://www.rfc-editor.org/rfc/rfc7845.html) 与 [Vorbis I 规范](https://www.xiph.org/vorbis/doc/Vorbis_I_spec.html) 检查起始页、编解码识别头、声道/采样参数、页 CRC、结束页和字节边界；只读取识别页及有限的尾部数据，不整文件缓冲。
+- 类型检查、生产构建及 75 项自动测试通过，包含 OGG 格式大小写、Vorbis / Opus 上传、正确 MIME、Range 音频、损坏页 CRC、截断文件、非音频编码和具体字段错误。
+- Chromium 的 Vorbis、Opus 各通过 8 项专项检查：上传与资料读取、MIME 和在线 Range、真实解码播放、完整下载、离线刷新播放、离线拖动、离线 206 响应、缓存 SHA-256 字节一致性。参考音频来自 Chromium 官方测试数据，仅用于本地验收。
+- 原有 MP3 / M4A、歌单、收藏和离线行为在 Chromium、WebKit 中各通过 18 项回归场景。
+- Windows WebKit 在参考文件的原生解码预检中无法解码 OGG，两种编码均记录为未测试，不记为通过。实际 iPhone 尚未验证；[WebKit 官方文档](https://webkit.org/blog/16574/webkit-features-in-safari-18-4/)说明 iPhone 的 OGG Vorbis / Opus 支持从 iOS 18.4 / Safari 18.4 开始。
+- 专项结果为 `output/playwright/ogg-results.json`。单文件上限仍为 64 MiB，不涉及数据库迁移。
