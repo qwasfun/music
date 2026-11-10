@@ -1,4 +1,4 @@
-import {memo,useEffect,useLayoutEffect,useRef,useState} from 'react';
+import {memo,useEffect,useLayoutEffect,useRef,useState,type CSSProperties} from 'react';
 import {createPortal} from 'react-dom';
 import {useWindowVirtualizer} from '@tanstack/react-virtual';
 import {ArrowDown,ArrowUp,Check,CheckCircle2,Download,Ellipsis,FolderHeart,Headphones,Heart,ListMusic,Play,Settings2,Trash2,X} from 'lucide-react';
@@ -30,6 +30,7 @@ export const TrackList=memo(function TrackList({tracks,currentId,playing,favorit
   useLayoutEffect(()=>{
     if(!menu)return;
     const height=panel.current?.getBoundingClientRect().height||300;
+    panel.current?.style.setProperty('--menu-height',`${height}px`);
     setMenuTop(Math.max(8,Math.min(menu.anchor.bottom+5,window.innerHeight-height-8)));
     const close=()=>setMenu(null);
     const outside=(event:PointerEvent)=>{if(!panel.current?.contains(event.target as Node))close();};
@@ -61,7 +62,7 @@ export const TrackList=memo(function TrackList({tracks,currentId,playing,favorit
         {after>0&&<tr aria-hidden="true" className="virtual-spacer"><td colSpan={columns} style={{height:after}}/></tr>}
       </tbody>
     </table>
-    {menu&&createPortal(<div ref={panel} className="menu-panel track-menu-portal" role="menu" aria-label={`${menu.track.title} 更多操作`} style={{top:menuTop,left:Math.max(8,Math.min(menu.anchor.right-190,window.innerWidth-198))}} onClick={()=>setMenu(null)}>
+    {menu&&createPortal(<div ref={panel} className="menu-panel track-menu-portal" role="menu" aria-label={`${menu.track.title} 更多操作`} style={{'--menu-top':`${menuTop}px`,'--menu-left':`${Math.max(8,Math.min(menu.anchor.right-190,window.innerWidth-198))}px`} as CSSProperties} onClick={()=>setMenu(null)}>
       <button role="menuitem" onClick={()=>player.add(menu.track.id)}><ListMusic size={15}/>加入播放队列</button>
       <button role="menuitem" onClick={()=>action('add')}><FolderHeart size={15}/>添加到歌单</button>
       <button role="menuitem" onClick={()=>action('edit')}><Settings2 size={15}/>编辑歌曲资料</button>

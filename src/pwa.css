@@ -1,0 +1,100 @@
+/* Keep viewport scrolling: the song list uses the window virtualizer. */
+:root {
+  --app-background: #111315;
+  --safe-area-top: env(safe-area-inset-top, 0px);
+  --safe-area-right: env(safe-area-inset-right, 0px);
+  --safe-area-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-area-left: env(safe-area-inset-left, 0px);
+  --status-bar-space: var(--safe-area-top);
+  --toolbar-padding-x: 38px;
+  --toolbar-height: 87px;
+  --sidebar-padding-top: 30px;
+  --sidebar-padding-x: 18px;
+  --player-padding-x: 27px;
+  --modal-margin: 22px;
+  --full-player-padding-top: 30px;
+}
+
+body { background: var(--app-background); }
+.pwa-status-bar { display: none; }
+
+/* Experimental iOS 27 workaround: keep an opaque painted layer at the viewport
+   edge in installed mode, including while React loads or an overlay is open.
+   Device evidence: https://modernwebweekly.substack.com/p/so-whats-up-with-the-ios27-blur */
+@media (display-mode: standalone) {
+  :root { --status-bar-space: max(6px, var(--safe-area-top)); }
+  .pwa-status-bar {
+    display: block;
+    position: fixed;
+    inset: 0 0 auto;
+    height: var(--status-bar-space);
+    background: var(--app-background);
+    pointer-events: none;
+    z-index: 100;
+  }
+}
+
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 60;
+  height: calc(var(--toolbar-height) + var(--status-bar-space));
+  padding-top: var(--status-bar-space);
+  padding-right: max(var(--toolbar-padding-x), var(--safe-area-right));
+  padding-left: max(var(--toolbar-padding-x), calc(var(--safe-area-left) - var(--sidebar-width)));
+  background: var(--app-background);
+}
+.sidebar {
+  width: calc(var(--sidebar-width) + var(--safe-area-left));
+  padding-top: calc(var(--sidebar-padding-top) + var(--status-bar-space));
+  padding-left: calc(var(--sidebar-padding-x) + var(--safe-area-left));
+}
+.content {
+  padding-left: max(var(--toolbar-padding-x), calc(var(--safe-area-left) - var(--sidebar-width)));
+  padding-right: max(var(--toolbar-padding-x), var(--safe-area-right));
+}
+.player-bar {
+  padding-left: max(var(--player-padding-x), var(--safe-area-left));
+  padding-right: max(var(--player-padding-x), var(--safe-area-right));
+}
+.mobile-nav { padding-left: var(--safe-area-left); padding-right: var(--safe-area-right); }
+
+.full-player {
+  padding-top: calc(var(--full-player-padding-top) + var(--status-bar-space));
+  padding-right: max(30px, var(--safe-area-right));
+  padding-bottom: max(30px, var(--safe-area-bottom));
+  padding-left: max(30px, var(--safe-area-left));
+}
+.full-player-top, .full-player-title, .full-progress, .full-controls, .full-player-foot { flex-shrink: 0; }
+
+.modal-backdrop {
+  padding-top: calc(var(--modal-margin) + var(--status-bar-space));
+  padding-right: max(var(--modal-margin), var(--safe-area-right));
+  padding-bottom: calc(var(--modal-margin) + var(--safe-area-bottom));
+  padding-left: max(var(--modal-margin), var(--safe-area-left));
+}
+.modal {
+  max-height: min(85dvh, calc(100dvh - var(--status-bar-space) - var(--safe-area-bottom) - 2 * var(--modal-margin)));
+}
+
+.track-menu-portal {
+  --menu-width: min(190px, calc(100vw - var(--safe-area-left) - var(--safe-area-right) - 16px));
+  width: var(--menu-width);
+  max-height: calc(100dvh - var(--status-bar-space) - var(--safe-area-bottom) - 16px);
+  top: clamp(calc(var(--status-bar-space) + 8px), var(--menu-top, 8px), calc(100dvh - var(--safe-area-bottom) - var(--menu-height, 300px) - 8px));
+  left: clamp(calc(var(--safe-area-left) + 8px), var(--menu-left, 8px), calc(100vw - var(--safe-area-right) - var(--menu-width) - 8px));
+}
+
+@media (min-width: 1500px) { :root { --toolbar-padding-x: 48px; } }
+@media (min-width: 761px) { .main { margin-left: calc(var(--sidebar-width) + var(--safe-area-left)); } }
+@media (max-width: 1180px) { :root { --toolbar-padding-x: 26px; --sidebar-padding-x: 14px; } }
+@media (max-width: 960px) { :root { --toolbar-padding-x: 22px; --toolbar-height: 76px; --sidebar-padding-top: 25px; --sidebar-padding-x: 10px; } }
+@media (max-width: 760px) {
+  :root { --toolbar-padding-x: 20px; --modal-margin: 14px; --full-player-padding-top: 20px; --player-padding-x: 12px; }
+  .topbar {
+    height: auto;
+    min-height: calc(72px + var(--status-bar-space));
+    padding-top: calc(18px + var(--status-bar-space));
+  }
+}
+@media (max-width: 380px) { :root { --toolbar-padding-x: 16px; } }

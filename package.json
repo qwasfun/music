@@ -10,6 +10,7 @@
     "check": "tsc -b",
     "test": "vitest run",
     "test:e2e": "node tests/browser.mjs",
+    "test:pwa": "node tests/pwa-layout-browser.mjs",
     "test:capacity": "node tests/capacity-browser.mjs",
     "db:local": "wrangler d1 migrations apply DB --local",
     "deploy": "pnpm build && wrangler deploy",

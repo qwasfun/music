@@ -70,6 +70,8 @@ OGG 专项验收：`pnpm fixtures` 会同时下载 Chromium 官方的 Vorbis 与
 
 OGG 时长回归：`pnpm fixtures` 还会准备 MDN 的 41 秒 Vorbis 文件，以及原始采样率标记为 0 的合法 Opus 对照文件（仅修改可选头字段及 CRC，不改音频数据）。PowerShell 中执行 `$env:OGG_DURATION_REGRESSION='1'; pnpm test:ogg`，验证旧解析默认值确实漏读时长，以及修复后的上传与离线播放；结果位于 `output/playwright/ogg-duration-results.json`。运行常规专项前用 `Remove-Item Env:OGG_DURATION_REGRESSION` 恢复。Windows WebKit 即使不能解码，也会验证上传和资料读取；播放仍标记为未测试。
 
+PWA 顶部适配：工具栏会随页面滚动保持吸顶，状态栏、横屏安全区、弹窗和全屏播放器有独立留白。安装模式使用固定实色顶部层缓解 iOS 27 的系统模糊，依据 [开发者的实机实验](https://modernwebweekly.substack.com/p/so-whats-up-with-the-ios27-blur)，实际效果仍需 iPhone 主屏幕应用验证。保持本地预览运行，执行 `pnpm test:pwa` 检查 Chromium / WebKit 的六种视口与安全区组合；可用 `TEST_BASE_URL` 指定其他本机端口。该脚本直接激活应用实际的 standalone CSS 规则来验证布局，不模拟 iOS 系统合成器。结果和截图位于 `output/playwright/pwa-layout-results.json` 及同目录。应用升级继续使用「立即更新」提示，保留离线歌曲。
+
 ## 项目结构
 
 - `src/`：React 界面、播放器、IndexedDB、下载队列与 Service Worker。

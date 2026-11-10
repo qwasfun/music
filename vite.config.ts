@@ -8,7 +8,7 @@ export default defineConfig({
     manifest: {
       name: '余音 · 私人音乐空间', short_name: '余音', lang: 'zh-CN',
       description: '收藏喜欢的声音，让音乐随时同行。', start_url: '/', scope: '/',
-      display: 'standalone', background_color: '#101214', theme_color: '#101214',
+      display: 'standalone', background_color: '#111315', theme_color: '#111315',
       icons: [{ src: '/icon-192.png', sizes: '192x192', type: 'image/png' }, { src: '/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any maskable' }]
     }
   })],
