@@ -62,6 +62,8 @@ FLAC 专项验收：保持本地预览运行，执行 `node tests/flac-browser.m
 
 OGG 专项验收：`pnpm fixtures` 会同时下载 Chromium 官方的 Vorbis 与 Opus 测试音频到忽略目录。保持本地预览运行，执行 `pnpm test:ogg` 验证上传、资料读取、实际解码播放、离线重开、拖动、Range 响应及缓存字节一致性。Windows WebKit 先以参考文件检查原生解码能力，不可解码时明确记录为未测试；输出位于 `output/playwright/ogg-results.json`。
 
+OGG 时长回归：`pnpm fixtures` 还会准备 MDN 的 41 秒 Vorbis 文件，以及原始采样率标记为 0 的合法 Opus 对照文件（仅修改可选头字段及 CRC，不改音频数据）。PowerShell 中执行 `$env:OGG_DURATION_REGRESSION='1'; pnpm test:ogg`，验证旧解析默认值确实漏读时长，以及修复后的上传与离线播放；结果位于 `output/playwright/ogg-duration-results.json`。运行常规专项前用 `Remove-Item Env:OGG_DURATION_REGRESSION` 恢复。Windows WebKit 即使不能解码，也会验证上传和资料读取；播放仍标记为未测试。
+
 ## 项目结构
 
 - `src/`：React 界面、播放器、IndexedDB、下载队列与 Service Worker。

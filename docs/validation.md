@@ -50,3 +50,12 @@ Chromium（本机 Chrome）与桌面 WebKit 各通过 18 个场景：PWA 注册�
 - 原有 MP3 / M4A、歌单、收藏和离线行为在 Chromium、WebKit 中各通过 18 项回归场景。
 - Windows WebKit 在参考文件的原生解码预检中无法解码 OGG，两种编码均记录为未测试，不记为通过。实际 iPhone 尚未验证；[WebKit 官方文档](https://webkit.org/blog/16574/webkit-features-in-safari-18-4/)说明 iPhone 的 OGG Vorbis / Opus 支持从 iOS 18.4 / Safari 18.4 开始。
 - 专项结果为 `output/playwright/ogg-results.json`。单文件上限仍为 64 MiB，不涉及数据库迁移。
+
+## 2026-11-10：OGG 上传时长修复
+
+- 复现「音频时长：无法读取时长」：`music-metadata` 默认解析会在 OGG 前段元数据完成后提前停止，较长文件尚未读取结束页时返回空时长。改为对 OGG 显式启用完整时长读取，其他格式保持现有解析方式。
+- 对原始输入采样率为 0 的合法 Opus 增加结束页时长回退：共用前后端 OGG 页结构与 CRC 校验，按固定 48 kHz 和 pre-skip 计算，不填入虚假时长。依据 [RFC 7845](https://www.rfc-editor.org/rfc/rfc7845.html)，原始输入采样率只是可选资料，不是播放采样率。无有效时长或损坏结束页仍返回具体字段、原因和重新导出要求。
+- 类型检查、生产构建及 80 项自动测试通过，新增 5 项回归涵盖 Vorbis / Opus 提前停止、未指定输入采样率及损坏结束页。
+- 使用 [MDN 的真实 Vorbis 示例](https://github.com/mdn/webaudio-examples/blob/main/audio-param/viper.ogg)（40.984 秒）及修改可选输入采样率为 0 的 Chromium Opus 参考音频，先确认旧默认解析确实返回空时长。两种文件在 Chromium 各通过 9 项检查，包含上传资料与时长、真实播放、完整下载、离线刷新与拖动、Range 和缓存字节一致性。
+- Windows WebKit 的两种文件均通过上传、资料时长和在线 Range 验证；原生解码预检仍失败，因此播放标记为未测试。iPhone 未进行真机验收。
+- 原有 MP3 / M4A、歌单、收藏和离线功能在 Chromium、WebKit 各通过 18 项回归。专项结果：`output/playwright/ogg-duration-results.json`。参考文件只用于本地测试，不写入线上曲库。

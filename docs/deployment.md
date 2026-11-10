@@ -39,3 +39,13 @@ FLAC 文件上传、资料/封面读取、在线播放与离线缓存已发布�
 OGG（Vorbis / Opus）的上传、资料读取、在线播放、完整下载和离线播放已发布。Worker 版本为 `06ffa079-6c20-406f-b90a-62ed6ab1714b`，未新增云资源或数据库迁移。R2 和音频响应使用 `audio/ogg`，原有登录邮箱 Secret、Access 保护、曲库和缓存协议保留。
 
 75 项自动测试、Chromium 的两种 OGG 编码各 8 项专项检查、Chromium/WebKit 各 18 项原有功能回归，以及 12 项线上检查通过。线上前端资源已确认包含 `.ogg` 文件入口和 Vorbis/Opus 格式说明。真实 iPhone 仍待验收，所需 Safari/iOS 版本见 README。
+
+## 2026-11-10：OGG 时长修复
+
+已发布 Worker 版本 `9aca8681-8d2e-48ff-ab29-ae6915a380a7`，修复默认解析提前结束导致长 OGG 歌曲时长为空，并兼容原始输入采样率未指定的 Opus 文件。无需数据库迁移，沿用现有资源；`OWNER_EMAIL` Secret 已确认保留。
+
+类型检查、生产构建、80 项自动测试及 Chromium / WebKit 各 18 项原有功能回归通过。真实长 Vorbis 和特殊 Opus 在 Chromium 各通过 9 项完整播放与离线检查，Windows WebKit 已验证上传和时长，播放受本机原生解码能力限制，未记为通过。线上主脚本 `index-CIg3dff0.js` 和 OGG 检查模块与本地构建 SHA-256 一致，均已纳入 Service Worker 预缓存。
+
+12 项线上页面、PWA、Access 访问保护及登录入口检查通过；未向线上私人曲库写入测试音频。
+
+已经打开的页面需刷新，并在出现新版本提示时点击「立即更新」后重新上传；已有音乐缓存保留。
