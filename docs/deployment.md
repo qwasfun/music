@@ -1,5 +1,13 @@
 # Cloudflare 部署记录
 
+## 2026-11-11：新增域名 music.185036.xyz
+
+`https://music.185036.xyz` 已通过 Cloudflare Workers Custom Domain 绑定到现有 `afterglow-music` 服务，保留 `https://music.qwas.fun`。新域名所属区域为 `185036.xyz`，绑定 ID 为 `d304150296c32e5a3d91fc98eb46ce59a25115f7`，已启用 HTTPS，预览路由关闭。两个域名均写入 Wrangler 配置，以便后续发布保留绑定。
+
+原 Access 应用增加 `music.185036.xyz/api` public destination，继续保护 API 及其子路径。保留原域名 destination、同一 audience、单个精确邮箱允许策略、OTP 提供方和 720 小时会话。Worker、D1、R2、ASSETS 与 Secret 保持原配置；本次仅绑定域名，当前 Worker `c2a273af-8dfb-40b6-a3e8-fdbf968f0467` 仍承担 100% 流量，未重新部署代码或操作曲库。
+
+新旧域名的主页、Service Worker、manifest、主脚本和样式已核对 SHA-256 完全一致。生产检查可用 `PRODUCTION_BASE_URL` 选择已配置域名，例如 PowerShell：`$env:PRODUCTION_BASE_URL='https://music.185036.xyz'; node tests/production.mjs`。两个地址共用云端数据，浏览器的 IndexedDB、缓存、主屏幕安装和登录 Cookie 按域名分别管理；原地址离线缓存保留，新地址需要重新下载。
+
 ## 2026-11-11：PWA 顶部模糊兼容修复（已上线）
 
 Worker 版本 `c2a273af-8dfb-40b6-a3e8-fdbf968f0467` 已发布至 `https://music.qwas.fun`，标签为 `ios27-pwa-top-blur`，对应源码提交 `743ca6f`，分支 `codex/ios27-pwa-top-blur`。此前线上版本为 `a12b7722-4f67-40e3-9116-35b730bcf57c`。

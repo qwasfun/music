@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import {mkdir,writeFile} from 'node:fs/promises';
 import {chromium} from 'playwright';
-const base='https://music.qwas.fun',checks=[];
+const base=process.env.PRODUCTION_BASE_URL||'https://music.qwas.fun',checks=[];
+assert.ok(['https://music.qwas.fun','https://music.185036.xyz'].includes(base),'Use a configured production origin');
 await mkdir('output/playwright',{recursive:true});
 for(const path of ['/','/sw.js','/manifest.webmanifest','/icon-192.png','/icon-512.png','/apple-touch-icon.png']){const r=await fetch(base+path,{redirect:'manual'});assert.equal(r.status,200,`${path} must load publicly`);checks.push({path,status:r.status,contentType:r.headers.get('content-type')});}
 for(const path of ['/api/library','/api/me','/api/tracks/not-a-real-id/audio']){const r=await fetch(base+path,{redirect:'manual'});assert.ok([302,303,401,403].includes(r.status),`${path} must require authentication`);const redirect=r.headers.get('location');checks.push({path,status:r.status,protected:true,loginOrigin:redirect?new URL(redirect,base).origin:undefined});}

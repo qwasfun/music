@@ -1,5 +1,13 @@
 # 验收记录
 
+## 2026-11-11：music.185036.xyz 域名绑定
+
+- 新域名和原 `music.qwas.fun` 各通过 12 项生产检查：页面、PWA 资源、Service Worker 控制、390px 布局、API 未登录及伪造身份访问保护、邮箱验证码入口。没有发送验证码或读取/写入线上私人曲库。
+- 两个域名的主页、manifest、Service Worker、主脚本和样式共 5 类资源逐字节 SHA-256 一致，保留已上线的 PWA 适配、曲库优化和上传去重。
+- Cloudflare 已确认两个 Custom Domain 均绑定 `afterglow-music`，具备证书且关闭预览路由；Access 同时保护两个 `/api` 路径，原 audience、精确邮箱规则、身份提供方、会话和现有绑定保留。当前 Worker 版本仍为 `c2a273af-8dfb-40b6-a3e8-fdbf968f0467`。
+- 浏览器缓存按来源隔离，新域名需要独立下载离线歌曲。新域名主屏幕安装及完整邮箱登录往返仍需真实设备与账号验证。
+- 输出：`output/playwright/production-music.185036.xyz-results.json`、`production-music.qwas.fun-results.json` 和 `custom-domain-assets.json`。本次未新增数据库迁移或重新发布 Worker 代码。
+
 ## 2026-11-11：PWA 顶部与安全区修复
 
 - 在独立分支 `codex/ios27-pwa-top-blur` 实施。先保存已上线曲库优化与上传去重的源码基线；该基线重建出的 26 个静态资源 SHA-256 与线上 `a12b7722-4f67-40e3-9116-35b730bcf57c` 发布记录完全一致。原工作区未提交文件保留。
