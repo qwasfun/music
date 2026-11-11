@@ -16,6 +16,41 @@ async function upload(bytes:Uint8Array,title='Test song',filename='tone.mp3'){
 const fakeMp3=(size=4096)=>{const b=new Uint8Array(size);b.set([255,251,144,100]);return b;};
 describe('private music API',()=>{
   let trackId:string,playlistId:string;
+  it('assembles a 128 MiB object from 16 parts and serves its final range', async () => {
+    const size=128 * 1024 ** 2;
+    const started=await request('/uploads','POST',{title:'128 MiB boundary',filename:'large.mp3',size,duration:20});
+    expect(started.status).toBe(201);
+    const {id}=await started.json() as {id:string};
+    let published=false;
+    try {
+      const part=fakeMp3(PART_SIZE);
+      const count=Math.ceil(size / PART_SIZE);
+      expect(count).toBe(16);
+      for(let number=1;number<=count;number++){
+        expect((await request(`/uploads/${id}/parts/${number}`,'PUT',part)).status).toBe(200);
+      }
+      const completed=await request(`/uploads/${id}/complete`,'POST');
+      expect(completed.status).toBe(201);
+      published=true;
+      expect(await completed.json()).toMatchObject({id,size,mime:'audio/mpeg'});
+      const head=await request(`/tracks/${id}/audio`,'HEAD');
+      expect(head.headers.get('Content-Length')).toBe(String(size));
+      const end=await request(`/tracks/${id}/audio`,'GET',undefined,{Range:'bytes=-4'});
+      expect(end.status).toBe(206);
+      expect(end.headers.get('Content-Range')).toBe(`bytes ${size-4}-${size-1}/${size}`);
+      expect(new Uint8Array(await end.arrayBuffer())).toEqual(new Uint8Array(4));
+    } finally {
+      await request(published?`/tracks/${id}`:`/uploads/${id}`,'DELETE');
+    }
+  },120000);
+  it('rejects an upload above 128 MiB with the specific size field', async () => {
+    const response=await request('/uploads','POST',{title:'Oversized audio',filename:'large.mp3',size:128 * 1024 ** 2 + 1,duration:20});
+    expect(response.status).toBe(422);
+    const body=await response.json() as {error:{fields:Array<{field:string;label:string;reason:string;action:string}>}};
+    expect(body.error.fields).toEqual([
+      expect.objectContaining({field:'size',label:'音频文件大小',reason:'单文件最多 128 MiB；请压缩或裁剪后重新上传',action:expect.any(String)})
+    ]);
+  });
   it('rejects production requests without Access and rejects forged identity headers',async()=>{for(const headers of [{},{'Cf-Access-Jwt-Assertion':'forged'}]){const r=await mf.dispatchFetch('https://music.qwas.fun/api/library',{headers});expect(r.status).toBe(401);}});
   it('rejects cross-origin writes',async()=>{const r=await request('/playlists','POST',{name:'test'},{Origin:'https://evil.invalid'});expect(r.status).toBe(403);});
   it('returns specific structured field errors',async()=>{const r=await request('/uploads','POST',{title:'',filename:'x.wav',size:999999999,duration:0});expect(r.status).toBe(422);const body=await r.json()as any;expect(body.error.fields.length).toBeGreaterThanOrEqual(4);expect(body.error.fields.every((f:any)=>f.field&&f.label&&f.reason&&f.action)).toBe(true);});

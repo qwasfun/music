@@ -94,7 +94,7 @@ async function getTrack(c: any): Promise<any> {
 async function hashObject(bucket:R2Bucket,key:string):Promise<string|null> {
   const object=await bucket.get(key);
   if(!object)return null;
-  // Stream into Workers' digest extension instead of buffering up to 64 MiB per upload.
+  // Stream SHA-256 verification instead of buffering an entire upload in the Worker.
   const digest=new (crypto as Crypto & {DigestStream:typeof DigestStream}).DigestStream('SHA-256');
   await object.body.pipeTo(digest);
   return Array.from(new Uint8Array(await digest.digest),byte=>byte.toString(16).padStart(2,'0')).join('');
