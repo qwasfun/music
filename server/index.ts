@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { verifyIdentity } from './auth';
 import { z } from 'zod';
-import { metadataSchema, uploadSchema, playlistSchema, validationError, uploadMime, PART_SIZE, type Track } from '../shared/contracts';
+import { metadataSchema, uploadSchema, playlistSchema, playCountSyncSchema, validationError, uploadMime, PART_SIZE, type PlayCountSyncResult, type Track } from '../shared/contracts';
 import { validateFlac } from './flac';
 import { validateOgg } from './ogg';
 import { parseRange } from './range';
@@ -49,6 +49,43 @@ app.get('/api/library',async c=>{
     c.env.DB.prepare('SELECT track_id FROM favorites WHERE user_id=?').bind(uid)
   ]);
   return c.json({user:{id:uid,name:'我的音乐'},tracks:tracks.results.map(t=>({...t,cover:!!t.cover})),playlists:playlists.results.map(p=>({...p,trackIds:items.results.filter(i=>i.playlist_id===p.id).map(i=>i.track_id)})),favorites:favorites.results.map(f=>f.track_id)});
+});
+app.post('/api/play-counts/sync',async c=>{
+  const userId=c.get('userId');
+  const input=playCountSyncSchema.parse(await c.req.json());
+  if(input.userId!==userId)return fail(409,'PLAY_COUNT_ACCOUNT_CHANGED','登录账号已变更，请刷新曲库后重试','userId','曲库账号');
+
+  const db=c.env.DB;
+  const summary=db.prepare(`
+    SELECT track_id AS trackId, SUM(count) AS total,
+           SUM(CASE WHEN device_id=? THEN count ELSE 0 END) AS deviceCount
+    FROM play_counts WHERE user_id=? GROUP BY track_id
+  `).bind(input.deviceId,userId);
+  const statements=[];
+  if(input.counts.length){
+    statements.push(db.prepare(`
+      WITH submitted AS (
+        SELECT json_extract(value,'$.trackId') AS track_id, json_extract(value,'$.count') AS count
+        FROM json_each(?3)
+      )
+      INSERT INTO play_counts(user_id,track_id,device_id,count)
+      SELECT ?1, s.track_id, ?2, s.count FROM submitted s
+      WHERE EXISTS(SELECT 1 FROM tracks t WHERE t.id=s.track_id AND t.user_id=?1)
+         OR EXISTS(SELECT 1 FROM deleted_play_count_tracks d WHERE d.track_id=s.track_id AND d.user_id=?1)
+      ON CONFLICT(user_id,track_id,device_id) DO UPDATE SET count=excluded.count
+      WHERE excluded.count>play_counts.count
+    `).bind(userId,input.deviceId,JSON.stringify(input.counts)));
+  }
+  statements.push(summary);
+  const results=await db.batch<{trackId:string;total:number;deviceCount:number}>(statements);
+  const result:PlayCountSyncResult={totalCount:0,trackCounts:{},deviceCounts:{},ignoredTrackIds:[]};
+  for(const row of results[results.length-1].results){
+    result.totalCount+=row.total;
+    result.trackCounts[row.trackId]=row.total;
+    if(row.deviceCount)result.deviceCounts[row.trackId]=row.deviceCount;
+  }
+  result.ignoredTrackIds=input.counts.map(entry=>entry.trackId).filter(id=>!result.deviceCounts[id]);
+  return c.json(result);
 });
 async function getTrack(c: any): Promise<any> {
   const t=await c.env.DB.prepare('SELECT * FROM tracks WHERE id=? AND user_id=?').bind(c.req.param('id'),c.get('userId')).first();
@@ -192,7 +229,17 @@ app.put('/api/tracks/:id/cover',async c=>{
 });
 app.get('/api/tracks/:id/cover',async c=>{const t=await getTrack(c);if(!t.cover_key)return c.notFound();const o=await c.env.BUCKET.get(t.cover_key);if(!o)return c.notFound();return new Response(o.body,{headers:{'Content-Type':o.httpMetadata?.contentType||'image/jpeg','Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff'}});});
 app.patch('/api/tracks/:id',async c=>{const t=await getTrack(c);const d=metadataSchema.parse(await c.req.json());await c.env.DB.prepare('UPDATE tracks SET title=?,artist=?,album=? WHERE id=?').bind(d.title,d.artist,d.album,t.id).run();return c.json({ok:true});});
-app.delete('/api/tracks/:id',async c=>{const t=await getTrack(c);await c.env.BUCKET.delete([t.object_key,...(t.cover_key?[t.cover_key]:[])]);await c.env.DB.batch([c.env.DB.prepare('UPDATE playlists SET version=version+1 WHERE id IN (SELECT playlist_id FROM playlist_tracks WHERE track_id=?)').bind(t.id),c.env.DB.prepare('DELETE FROM tracks WHERE id=?').bind(t.id)]);return c.json({ok:true});});
+app.delete('/api/tracks/:id',async c=>{
+  const t=await getTrack(c);
+  await c.env.BUCKET.delete([t.object_key,...(t.cover_key?[t.cover_key]:[])]);
+  const db=c.env.DB;
+  await db.batch([
+    db.prepare('INSERT OR IGNORE INTO deleted_play_count_tracks(track_id,user_id) SELECT id,user_id FROM tracks WHERE id=? AND user_id=?').bind(t.id,c.get('userId')),
+    db.prepare('UPDATE playlists SET version=version+1 WHERE id IN (SELECT playlist_id FROM playlist_tracks WHERE track_id=?)').bind(t.id),
+    db.prepare('DELETE FROM tracks WHERE id=?').bind(t.id),
+  ]);
+  return c.json({ok:true});
+});
 app.put('/api/favorites/:id',async c=>{await getTrack(c);await c.env.DB.prepare('INSERT OR IGNORE INTO favorites(user_id,track_id) VALUES (?,?)').bind(c.get('userId'),c.req.param('id')).run();return c.json({ok:true});});
 app.delete('/api/favorites/:id',async c=>{await c.env.DB.prepare('DELETE FROM favorites WHERE user_id=? AND track_id=?').bind(c.get('userId'),c.req.param('id')).run();return c.json({ok:true});});
 app.post('/api/playlists',async c=>{const d=playlistSchema.parse(await c.req.json()),id=crypto.randomUUID();await c.env.DB.batch([c.env.DB.prepare('INSERT OR IGNORE INTO users(id) VALUES (?)').bind(c.get('userId')),c.env.DB.prepare('INSERT INTO playlists(id,user_id,name) VALUES (?,?,?)').bind(id,c.get('userId'),d.name)]);return c.json({id,name:d.name,version:1,trackIds:[]},201);});

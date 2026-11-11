@@ -16,11 +16,26 @@ export const uploadSchema = metadataSchema.extend({
   contentHash: z.string().regex(/^[a-f0-9]{64}$/, '校验信息无效；请重新选择音频文件上传').optional(),
 });
 export const playlistSchema = z.object({ name: z.string().trim().min(1, '不能为空；请填写歌单名称').max(60, '最多填写 60 个字符') });
+export const PLAY_COUNT_BATCH_SIZE = 100;
+export const playCountSyncSchema = z.object({
+  userId: z.string({error:'账号标识无效；请刷新曲库后重试'}).min(1,'账号标识为空；请重新登录'),
+  deviceId: z.uuid({error:'设备标识无效；请刷新页面后重试'}).toLowerCase(),
+  counts: z.array(z.object({
+    trackId: z.uuid({error:'歌曲编号无效；请刷新曲库后重试'}).toLowerCase(),
+    count: z.number({error:'播放次数必须是数字'}).int('播放次数必须是整数').min(1,'播放次数至少为 1').max(1_000_000_000,'播放次数最多为 10 亿'),
+  }),{error:'播放记录格式无效；请刷新页面后重试'}).max(PLAY_COUNT_BATCH_SIZE,'每批最多同步 100 首歌曲；请分批重试'),
+});
 export const labels: Record<string, string> = { title: '歌曲名称', artist: '歌手', album: '专辑', filename: '音频文件', size: '音频文件大小', duration: '音频时长', contentHash: '音频文件', name: '歌单名称', version: '歌单版本', trackIds: '歌单歌曲', file: '音频文件', cover: '专辑封面', capacity: '缓存容量' };
+const playCountLabels: Record<string,string>={userId:'曲库账号',deviceId:'播放统计设备',counts:'播放记录'};
 export interface FieldError { field: string; label: string; reason: string; action: string }
 export interface ApiErrorBody { error: { code: string; message: string; fields: FieldError[] } }
 export function validationError(error: z.ZodError): ApiErrorBody {
-  const fields = error.issues.map(issue => { const field = issue.path.map(String).join('.'); return { field, label: labels[String(issue.path[0])] || '提交字段', reason: issue.message, action: '请按提示修改后重试' }; });
+  const fields = error.issues.map(issue => {
+    const [root,index,key]=issue.path;
+    let label=labels[String(root)]||playCountLabels[String(root)]||'提交字段';
+    if(root==='counts'&&typeof index==='number')label=`第 ${index+1} 条播放记录${key==='trackId'?'的歌曲编号':key==='count'?'的播放次数':''}`;
+    return {field:issue.path.map(String).join('.'),label,reason:issue.message,action:'请按提示修改后重试'};
+  });
   return { error: { code: 'VALIDATION_ERROR', message: fields.map(f => `${f.label}：${f.reason}`).join('；'), fields } };
 }
 export interface Track { id: string; title: string; artist: string; album: string; duration: number; size: number; mime: string; cover: boolean; createdAt: string }
@@ -28,6 +43,14 @@ export type UploadStartResult = {id:string;partSize:number;duplicate?:false} | {
 export type UploadCompleteResult = Track & {duplicate?:boolean};
 export interface Playlist { id: string; name: string; version: number; trackIds: string[] }
 export interface Library { user: { id: string; name: string }; tracks: Track[]; playlists: Playlist[]; favorites: string[] }
+export interface PlayCountSummary {
+  totalCount: number;
+  trackCounts: Record<string,number>;
+  deviceCounts: Record<string,number>;
+}
+export interface PlayCountSyncResult extends PlayCountSummary {
+  ignoredTrackIds: string[];
+}
 export interface CacheEntry { id: string; size: number; pinned: boolean; lastUsed: number }
 export interface DownloadTask { id: string; pinned: boolean; status: 'queued' | 'downloading' | 'error'; error?: string }
 export const audioUrl = (id: string) => `/api/tracks/${encodeURIComponent(id)}/audio`;

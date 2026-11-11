@@ -1,5 +1,11 @@
 # Cloudflare 部署记录
 
+## 2026-11-11 · 播放次数统计
+
+生产 D1 已应用 `0004_play_counts.sql`。新增两张表，分别保存各设备的累计次数和已删除歌曲的归属。迁移仅增加表，现有歌曲、歌单与下载缓存可继续使用。
+
+Worker 版本 `2cc61590-4941-4ff5-ba53-7ad3a465898b` 已承接 100% 流量，部署 ID 为 `00797f23-84ce-449a-9b9b-1bc0924b78f5`。构建合入了现有生产版本的 iOS PWA 顶栏修复，并保留 `music.qwas.fun` 和 `music.185036.xyz` 的现有绑定与 Access 保护。上一 Worker 版本为 `c2a273af-8dfb-40b6-a3e8-fdbf968f0467`，可回滚代码并保留新增表。
+
 ## 2026-11-11：新增域名 music.185036.xyz
 
 `https://music.185036.xyz` 已通过 Cloudflare Workers Custom Domain 绑定到现有 `afterglow-music` 服务，保留 `https://music.qwas.fun`。新域名所属区域为 `185036.xyz`，绑定 ID 为 `d304150296c32e5a3d91fc98eb46ce59a25115f7`，已启用 HTTPS，预览路由关闭。两个域名均写入 Wrangler 配置，以便后续发布保留绑定。

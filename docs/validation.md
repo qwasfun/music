@@ -117,3 +117,10 @@ Chromium（本机 Chrome）与桌面 WebKit 各通过 18 个场景：PWA 注册�
 - 已确认保留原有 D1、R2、ASSETS 绑定和 `OWNER_EMAIL` Secret，线上没有 `DEV_AUTH`。12 项页面、PWA、移动布局、匿名及伪造身份访问保护、邮箱 OTP 登录入口检查通过。
 - 26 个公开静态资源与本地构建的 SHA-256 全部一致，去重提示在 `index-Y6Uf5V-q.js` 中，主脚本已进入 Service Worker 预缓存。结果见 `output/playwright/production-results.json`、`production-release-assets.json` 及 `production-*.png`。
 - 本次未登录线上私人曲库、发送验证码或上传测试音乐；真实账号下的上传去重和 iPhone 真机尚未实测。已打开的页面需刷新并在更新提示中选择「立即更新」加载新前端，已有离线音乐保留。
+
+## 2026-11-11 · 播放次数统计
+
+- 类型检查、生产构建、Wrangler 发布预演和 117 项自动测试通过。覆盖长短音频计次、单曲循环、切歌、重复及乱序提交、跨账号隔离和删除后补传。
+- 播放统计专项通过 4 组 Chrome 场景，使用两个独立会话及真实音频验证暂停、拖动、次数排序、离线重开、联网合并和删除后的历史总数。Chromium 和 WebKit 各通过 18 项原有功能回归，PWA 安全区与顶栏通过 50 项布局检查。
+- 两个生产域名各通过 14 项公开页面与鉴权检查。主域 26 个公开静态资源和备用域 5 个核心资源的 SHA-256 与本地构建一致。测试未登录生产账号，真实 iPhone 主屏幕播放仍待验证。
+- 可在隔离的本地 Wrangler 预览上运行 `node tests/play-counts-browser.mjs`。结果位于 `output/playwright/play-counts-results.json`、`production-results.json` 和 `production-results-185036.json`。

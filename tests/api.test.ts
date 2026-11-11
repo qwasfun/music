@@ -35,3 +35,63 @@ describe('private music API',()=>{
   it('removes deleted tracks from favorites and playlist entries',async()=>{expect((await request(`/tracks/${trackId}`,'DELETE')).status).toBe(200);const l=await(await request('/library')).json()as any;expect(l.tracks).toHaveLength(0);expect(l.favorites).toHaveLength(0);expect(l.playlists[0].trackIds).toHaveLength(0);expect(l.playlists[0].version).toBe(3);});
   it('serves a 500-song metadata library without reading audio blobs',async()=>{const db=await mf.getD1Database('DB');const statements=Array.from({length:500},(_,i)=>db.prepare('INSERT INTO tracks(id,user_id,title,artist,album,duration,size,mime,object_key) VALUES (?,?,?,?,?,?,?,?,?)').bind(crypto.randomUUID(),'local-owner',`Track ${i}`,'Artist','Album',180,10*1024*1024,'audio/mpeg',`perf/${i}`));for(let i=0;i<statements.length;i+=50)await db.batch(statements.slice(i,i+50));const start=performance.now();const r=await request('/library');const l=await r.json()as any;expect(l.tracks).toHaveLength(500);expect(performance.now()-start).toBeLessThan(3000);console.info(`500-song metadata snapshot: ${Math.round(performance.now()-start)} ms, ${JSON.stringify(l).length} bytes`);});
 });
+
+describe('play count sync',()=>{
+  const deviceId=crypto.randomUUID(),secondDevice=crypto.randomUUID();
+  const trackId=crypto.randomUUID(),foreignTrackId=crypto.randomUUID(),deletedBeforeFirstPlay=crypto.randomUUID();
+  const path='/play-counts/sync';
+  const payload=(counts:{trackId:string;count:number}[],device:string=deviceId,userId='local-owner')=>({userId,deviceId:device,counts});
+
+  beforeAll(async()=>{
+    const db=await mf.getD1Database('DB');
+    await db.prepare('INSERT INTO users(id) VALUES (?)').bind('other-owner').run();
+    for(const [id,user] of [[trackId,'local-owner'],[foreignTrackId,'other-owner'],[deletedBeforeFirstPlay,'local-owner']]){
+      await db.prepare('INSERT INTO tracks(id,user_id,title,duration,size,mime,object_key) VALUES (?,?,?,?,?,?,?)')
+        .bind(id,user,'play count test',18,128,'audio/mpeg',`play-count-tests/${id}`).run();
+    }
+  });
+
+  it('protects requests and returns nested field-specific errors',async()=>{
+    const blocked=await mf.dispatchFetch(`https://music.qwas.fun/api${path}`,{
+      method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload([])),
+    });
+    expect(blocked.status).toBe(401);
+    const invalid=await request(path,'POST',payload([{trackId:'invalid',count:-1}],'invalid'));
+    expect(invalid.status).toBe(422);
+    const body=await invalid.json()as any;
+    expect(body.error.fields).toEqual(expect.arrayContaining([
+      expect.objectContaining({field:'deviceId',label:'播放统计设备'}),
+      expect.objectContaining({field:'counts.0.trackId',label:'第 1 条播放记录的歌曲编号'}),
+      expect.objectContaining({field:'counts.0.count',label:'第 1 条播放记录的播放次数'}),
+    ]));
+    expect((await request(path,'POST',payload(Array.from({length:101},()=>({trackId,count:1}))))).status).toBe(422);
+    expect((await request(path,'POST',payload([{trackId,count:1}],deviceId,'other-owner'))).status).toBe(409);
+  });
+
+  it('merges repeated and concurrent submissions once across devices',async()=>{
+    const first={trackId,count:3};
+    const accepted=await request(path,'POST',payload([first]));
+    expect(accepted.status).toBe(200);
+    expect(await accepted.json()).toMatchObject({totalCount:3,trackCounts:{[trackId]:3},deviceCounts:{[trackId]:3}});
+    const responses=await Promise.all([
+      request(path,'POST',payload([first])),
+      request(path,'POST',payload([{trackId,count:5}])),
+      request(path,'POST',payload([{trackId,count:2}])),
+      request(path,'POST',payload([{trackId,count:2}],secondDevice)),
+    ]);
+    expect(responses.map(response=>response.status)).toEqual([200,200,200,200]);
+    expect(await(await request(path,'POST',payload([]))).json()).toEqual({
+      totalCount:7,trackCounts:{[trackId]:7},deviceCounts:{[trackId]:5},ignoredTrackIds:[],
+    });
+  });
+
+  it('isolates other owners and accepts late offline counts for deleted songs',async()=>{
+    const denied=await request(path,'POST',payload([{trackId:foreignTrackId,count:10}]));
+    expect(await denied.json()).toMatchObject({totalCount:7,ignoredTrackIds:[foreignTrackId]});
+    for(const id of [trackId,deletedBeforeFirstPlay])expect((await request(`/tracks/${id}`,'DELETE')).status).toBe(200);
+    const late=await request(path,'POST',payload([{trackId,count:6},{trackId:deletedBeforeFirstPlay,count:1}]));
+    expect(await late.json()).toMatchObject({
+      totalCount:9,trackCounts:{[trackId]:8,[deletedBeforeFirstPlay]:1},deviceCounts:{[trackId]:6,[deletedBeforeFirstPlay]:1},
+    });
+  });
+});

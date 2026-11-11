@@ -3,7 +3,7 @@ const cache=vi.hoisted(()=>({entries:new Map(),checking:false,ready:Promise.reso
 vi.mock('../src/cache',()=>({downloads:{touch:async()=>{},entries:cache.entries,overviewSnapshot:()=>({checking:cache.checking}),whenReady:()=>cache.ready}}));
 let player:typeof import('../src/player')['player'];
 beforeAll(async()=>{
-  vi.stubGlobal('Audio',class extends EventTarget {volume=1;currentTime=0;duration=240;src='';paused=true;getAttribute(){return this.src||null;}removeAttribute(){this.src='';}pause(){this.paused=true;this.dispatchEvent(new Event('pause'));}async play(){this.paused=false;this.dispatchEvent(new Event('playing'));}});
+  vi.stubGlobal('Audio',class extends EventTarget {volume=1;currentTime=0;duration=240;playbackRate=1;src='';paused=true;getAttribute(){return this.src||null;}removeAttribute(){this.src='';}pause(){this.paused=true;this.dispatchEvent(new Event('pause'));}async play(){this.paused=false;this.dispatchEvent(new Event('playing'));}});
   vi.stubGlobal('localStorage',{getItem:()=>null,setItem:()=>{},removeItem:()=>{}});vi.stubGlobal('navigator',{onLine:true});
   ({player}=await import('../src/player'));
 });
@@ -25,4 +25,37 @@ it('continues an offline play request once cache reconciliation completes',async
 });
 it('does not start deferred offline playback after the player is cleared',async()=>{
   vi.stubGlobal('navigator',{onLine:false});let ready!:()=>void;cache.checking=true;cache.ready=new Promise(resolve=>{ready=resolve;});player.setLibrary(library);player.playList(['one']);player.clear();cache.entries.set('one',{});cache.checking=false;ready();await cache.ready;await Promise.resolve();expect(player.snapshot()).toMatchObject({id:null,playing:false});expect(player.audio.getAttribute('src')).toBeNull();
+});
+
+it('starts a fresh play on repeat and track changes',()=>{
+  const clock=vi.spyOn(performance,'now');
+  const counts:string[]=[];
+  const stop=player.subscribeToCountedPlays(id=>counts.push(id));
+  const tracks=[library.tracks[0],{...library.tracks[0],id:'two'}];
+  const advance=(position:number,now:number)=>{
+    clock.mockReturnValue(now);
+    player.audio.currentTime=position;
+    player.audio.dispatchEvent(new Event('timeupdate'));
+  };
+  try{
+    clock.mockReturnValue(0);
+    player.audio.currentTime=0;
+    player.setLibrary({...library,tracks});
+    player.playList(['one','two']);
+    advance(25,25000);
+    player.next();
+    advance(30,30000);
+    expect(counts).toEqual([]);
+    advance(55,55000);
+    expect(counts).toEqual(['two']);
+    player.repeat();
+    player.audio.dispatchEvent(new Event('ended'));
+    advance(29,84000);
+    expect(counts).toEqual(['two']);
+    advance(30,85000);
+    expect(counts).toEqual(['two','two']);
+  }finally{
+    stop();
+    clock.mockRestore();
+  }
 });

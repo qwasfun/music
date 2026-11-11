@@ -10,11 +10,12 @@ import {Cover} from './Cover';
 export type TrackAction='favorite'|'add'|'edit'|'delete'|'up'|'down'|'remove';
 interface Props {
   tracks:Track[];currentId:string|null;playing:boolean;favorites:Set<string>;cachedIds:Set<string>;
+  playCounts:Readonly<Record<string,number>>;
   selectedPlaylist?:Playlist;viewKey:string;onAction:(action:TrackAction,track:Track,index:number)=>void;
 }
 interface Menu {track:Track;index:number;anchor:DOMRect}
 
-export const TrackList=memo(function TrackList({tracks,currentId,playing,favorites,cachedIds,selectedPlaylist,viewKey,onAction}:Props){
+export const TrackList=memo(function TrackList({tracks,currentId,playing,favorites,cachedIds,playCounts,selectedPlaylist,viewKey,onAction}:Props){
   const body=useRef<HTMLTableSectionElement>(null),panel=useRef<HTMLDivElement>(null);
   const visibleColumns=()=>window.innerWidth<=760?3:window.innerWidth<=960?4:5;
   const [columns,setColumns]=useState(visibleColumns),[scrollMargin,setScrollMargin]=useState(0),[menu,setMenu]=useState<Menu|null>(null),[menuTop,setMenuTop]=useState(0);
@@ -51,7 +52,7 @@ export const TrackList=memo(function TrackList({tracks,currentId,playing,favorit
         {before>0&&<tr aria-hidden="true" className="virtual-spacer"><td colSpan={columns} style={{height:before}}/></tr>}
         {items.map(item=>{const t=tracks[item.index],i=item.index;return <tr key={item.key} data-index={i} data-track-id={t.id} aria-rowindex={i+2} ref={virtual.measureElement} className={t.id===currentId?'is-current':''}>
           <td className="number-cell"><button className="row-play" aria-label={`播放 ${t.title}`} onClick={()=>t.id===currentId?player.toggle():play(i)}>{t.id===currentId&&playing?<span className="equalizer"><i/><i/><i/></span>:<><span>{String(i+1).padStart(2,'0')}</span><Play size={14} fill="currentColor"/></>}</button></td>
-          <td><div className="track-info"><button className="cover-button" aria-label={`播放 ${t.title}`} onClick={()=>play(i)}><Cover track={t}/></button><button className="track-title" onClick={()=>play(i)}><strong>{t.title}{cachedIds.has(t.id)&&<CheckCircle2 className="cached-mark" size={12}/>}</strong><small>{t.artist||'未知歌手'}</small></button></div></td>
+          <td><div className="track-info"><button className="cover-button" aria-label={`播放 ${t.title}`} onClick={()=>play(i)}><Cover track={t}/></button><button className="track-title" onClick={()=>play(i)}><strong>{t.title}{cachedIds.has(t.id)&&<CheckCircle2 className="cached-mark" size={12}/>}</strong><small className="track-details"><span>{t.artist||'未知歌手'}</span><span className="track-play-count">{(playCounts[t.id]??0).toLocaleString('zh-CN')} 次播放</span></small></button></div></td>
           <td className="album-cell">{t.album||'未命名专辑'}</td><td className="duration-cell">{formatTime(t.duration)}</td>
           <td className="actions-cell"><div className="track-actions">
             <button className={`icon-button favorite-button ${favorites.has(t.id)?'is-liked':''}`} aria-label={favorites.has(t.id)?`取消喜欢 ${t.title}`:`喜欢 ${t.title}`} onClick={()=>onAction('favorite',t,i)}><Heart size={16} fill={favorites.has(t.id)?'currentColor':'none'}/></button>
