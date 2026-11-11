@@ -1,5 +1,5 @@
 import { z } from 'zod';
-export const MAX_FILE = 64 * 1024 * 1024;
+export const MAX_FILE = 128 * 1024 * 1024;
 export const PART_SIZE = 8 * 1024 * 1024;
 export const AUDIO_CACHE = 'afterglow-audio-v1';
 export const COVER_CACHE = 'afterglow-covers-v1';
@@ -10,7 +10,7 @@ export const metadataSchema = z.object({
 });
 export const uploadSchema = metadataSchema.extend({
   filename: z.string().min(1, '请选择音频文件').max(255, '文件名最多 255 个字符').regex(/\.(mp3|m4a|flac|ogg)$/i, '仅支持 MP3、AAC 编码的 M4A、FLAC 和 OGG（Vorbis / Opus）；请转换格式后重新上传'),
-  size: z.number().int().positive('文件不能为空；请选择有效音频').max(MAX_FILE, '单文件最多 64 MiB；请压缩或裁剪后重新上传'),
+  size: z.number().int().positive('文件不能为空；请选择有效音频').max(MAX_FILE, `单文件最多 ${MAX_FILE / 1024 ** 2} MiB；请压缩或裁剪后重新上传`),
   duration: z.number().positive('无法读取时长；请选择可播放的音频').max(86400, '音频最长 24 小时'),
   // Optional for older installed clients; the server always hashes the uploaded bytes.
   contentHash: z.string().regex(/^[a-f0-9]{64}$/, '校验信息无效；请重新选择音频文件上传').optional(),

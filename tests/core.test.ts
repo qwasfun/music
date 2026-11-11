@@ -5,6 +5,18 @@ import {parseRange} from '../server/range';
 import {verifyIdentity} from '../server/auth';
 
 describe('field-specific validation',()=>{
+  it.each([64 * 1024 ** 2 + 1, 128 * 1024 ** 2])('accepts an upload of %i bytes', size => {
+    expect(uploadSchema.safeParse({filename:'large.flac',size,duration:10,title:'Large audio'}).success).toBe(true);
+  });
+  it('reports the 128 MiB limit when an upload is one byte too large', () => {
+    const result=uploadSchema.safeParse({filename:'large.flac',size:128 * 1024 ** 2 + 1,duration:10,title:'Large audio'});
+    expect(result.success).toBe(false);
+    if(!result.success){
+      expect(validationError(result.error).error.fields).toEqual([
+        expect.objectContaining({field:'size',label:'音频文件大小',reason:'单文件最多 128 MiB；请压缩或裁剪后重新上传',action:expect.any(String)})
+      ]);
+    }
+  });
   it('reports each invalid field without reflecting submitted values',()=>{const result=metadataSchema.safeParse({title:'',artist:'secret'.repeat(100),album:''});expect(result.success).toBe(false);if(!result.success){const body=validationError(result.error);expect(body.error.fields.map(f=>f.label)).toEqual(['歌曲名称','歌手']);expect(body.error.message).toContain('歌曲名称：');expect(body.error.message).not.toContain('secret');expect(body.error.fields.every(f=>f.reason&&f.action)).toBe(true);}});
   it.each([{filename:'test.wav',size:100,duration:10,title:'a'},{filename:'a.mp3',size:MAX_FILE+1,duration:10,title:'a'},{filename:'a.m4a',size:100,duration:0,title:'a'}])('rejects unsupported formats, size and unreadable duration',input=>expect(uploadSchema.safeParse(input).success).toBe(false));
   it.each(['music.flac','MUSIC.FLAC'])('accepts FLAC extension %s with correct MIME',filename=>{expect(uploadSchema.safeParse({filename,size:100,duration:10,title:'a'}).success).toBe(true);expect(uploadMime(filename)).toBe('audio/flac');});

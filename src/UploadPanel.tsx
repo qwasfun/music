@@ -1,6 +1,7 @@
 import {useRef,useState,useSyncExternalStore} from 'react';
 import {CheckCircle2,LoaderCircle,Music2,ShieldCheck,Upload,X} from 'lucide-react';
 import type {UploadQueue} from './upload-queue';
+import {MAX_FILE} from '../shared/contracts';
 export function UploadPanel({queue,canEdit}:{queue:UploadQueue;canEdit:()=>boolean}){
   const jobs=useSyncExternalStore(queue.subscribe,queue.snapshot),fileInput=useRef<HTMLInputElement>(null);
   const [expanded,setExpanded]=useState(false);
@@ -8,7 +9,7 @@ export function UploadPanel({queue,canEdit}:{queue:UploadQueue;canEdit:()=>boole
   function addFiles(files:FileList|null){if(files&&canEdit())queue.add(files);}
   return <><p className="modal-description">你的音乐会保存在私人云端，在其他设备登录后即可播放。相同文件会自动跳过。</p>
     <input ref={fileInput} type="file" accept=".mp3,.m4a,.flac,.ogg,audio/mpeg,audio/mp4,audio/flac,audio/x-flac,audio/ogg,application/ogg" multiple hidden onChange={e=>{addFiles(e.target.files);e.target.value='';}}/>
-    <button className="dropzone" onClick={()=>fileInput.current?.click()} onDragOver={e=>{e.preventDefault();e.currentTarget.classList.add('dragover');}} onDragLeave={e=>e.currentTarget.classList.remove('dragover')} onDrop={e=>{e.preventDefault();e.currentTarget.classList.remove('dragover');addFiles(e.dataTransfer.files);}}><span><Upload size={26}/></span><strong>拖放音乐到这里，或点击选择</strong><small>MP3 / M4A(AAC) / FLAC / OGG · 每首最多 64 MB · 支持批量上传</small></button>
+    <button className="dropzone" onClick={()=>fileInput.current?.click()} onDragOver={e=>{e.preventDefault();e.currentTarget.classList.add('dragover');}} onDragLeave={e=>e.currentTarget.classList.remove('dragover')} onDrop={e=>{e.preventDefault();e.currentTarget.classList.remove('dragover');addFiles(e.dataTransfer.files);}}><span><Upload size={26}/></span><strong>拖放音乐到这里，或点击选择</strong><small>MP3 / M4A(AAC) / FLAC / OGG · 每首最多 {MAX_FILE / 1024 ** 2} MiB · 支持批量上传</small></button>
     {jobs.length>0&&<div className="upload-jobs">{visible.map(j=><div className="upload-job" key={j.key} data-status={j.status}>
       <span className={`job-icon ${j.status==='done'||j.status==='skipped'?'complete':''}`}>{j.status==='done'||j.status==='skipped'?<CheckCircle2 size={20}/>:j.status==='uploading'?<LoaderCircle className="spin" size={20}/>:<Music2 size={20}/>}</span>
       <div><strong>{j.file.name}</strong><small role={j.status==='skipped'?'status':undefined} className={j.status==='error'?'error-text':''}>{j.message||(j.status==='queued'?'等待上传':'')}</small>{j.status==='uploading'&&<div className="meter"><i style={{width:`${j.progress*100}%`}}/></div>}</div>
