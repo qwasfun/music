@@ -13,7 +13,7 @@
     "test:pwa": "node tests/pwa-layout-browser.mjs",
     "test:capacity": "node tests/capacity-browser.mjs",
     "db:local": "wrangler d1 migrations apply DB --local",
-    "deploy": "pnpm build && wrangler deploy",
+    "deploy": "git push origin main",
     "icons": "node scripts/icons.mjs",
     "fixtures": "node scripts/fixture.mjs && node scripts/aac-fixture.mjs && node scripts/ogg-fixture.mjs",
     "test:ogg": "node tests/ogg-browser.mjs"
