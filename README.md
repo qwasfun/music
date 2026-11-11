@@ -87,7 +87,7 @@ PWA 顶部适配：工具栏会随页面滚动保持吸顶，状态栏、横屏�
 
 主分支为 `main`，版本库包含源码、依赖锁文件、数据库迁移和部署配置。依赖目录、构建产物、本机数据库、浏览器缓存、测试输出及本地环境变量文件均已忽略，`.env.example` 作为不含密钥的配置示例保留。
 
-日常修改可使用 `git status`、`git diff` 检查，再通过 `git add` 和 `git commit` 创建提交。远程仓库单独配置，提交代码不会自动部署网站；发布仍使用下方的部署流程。
+日常修改可使用 `git status`、`git diff` 检查，再通过 `git add` 和 `git commit` 创建提交。提交推送到 GitHub 后，Cloudflare Workers Builds 自动构建和部署。
 
 ## 部署与维护
 
@@ -96,9 +96,12 @@ PWA 顶部适配：工具栏会随页面滚动保持吸顶，状态栏、横屏�
 ```sh
 pnpm build
 pnpm test
-pnpm exec wrangler d1 migrations apply DB --remote
-pnpm exec wrangler deploy
+git push origin main
 ```
+
+Cloudflare 的生产构建命令为 `pnpm run build`，部署命令为 `npx wrangler deploy`。分支预览使用同一构建命令和 `npx wrangler preview`。`pnpm run deploy` 执行推送到 `main`，由 Cloudflare 执行发布。
+
+预览配置位于 `wrangler.jsonc` 的 `previews` 块，绑定 `afterglow-music-preview-db` 和 `afterglow-music-preview-audio`。所有分支预览共用这组测试资源。`OWNER_EMAIL` 在 Cloudflare 的 Previews Base 中作为 Secret 配置，并由原邮箱允许策略保护预览访问。预览数据库需要应用 `migrations/` 中的对应迁移。
 
 `OWNER_EMAIL` 使用 Worker Secret 保存；`ACCESS_AUD` 与团队地址配置于 `wrangler.jsonc`。更改登录邮箱时，同时更新 Access 精确邮箱策略和 Worker Secret。不要将 `DEV_AUTH` 加入线上配置。
 

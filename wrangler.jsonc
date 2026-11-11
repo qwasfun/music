@@ -5,7 +5,7 @@
   "compatibility_date": "2026-07-01",
   "account_id": "f94fe289bd879e05e4a9faac06dfdf40",
   "workers_dev": false,
-  "preview_urls": false,
+  "preview_urls": true,
   "assets": { "directory": "./dist", "binding": "ASSETS", "not_found_handling": "single-page-application", "run_worker_first": ["/api/*"] },
   "routes": [
     { "pattern": "music.qwas.fun", "custom_domain": true },
@@ -14,5 +14,14 @@
   "d1_databases": [{ "binding": "DB", "database_name": "afterglow-music-db", "database_id": "c971672a-616f-4b18-858f-aedcac81fd98", "migrations_dir": "migrations" }],
   "r2_buckets": [{ "binding": "BUCKET", "bucket_name": "afterglow-music-audio" }],
   "vars": { "APP_ORIGIN": "https://music.qwas.fun", "ACCESS_TEAM_DOMAIN": "https://polished-salad-f271.cloudflareaccess.com", "ACCESS_AUD": "e565ef8e72f359b4e049a19d97d3fbc8917da5b3500972f5ab0df38a06bafa61" },
+  "previews": {
+    "vars": {
+      "APP_ORIGIN": "https://afterglow-music.fun.workers.dev",
+      "ACCESS_TEAM_DOMAIN": "https://polished-salad-f271.cloudflareaccess.com",
+      "ACCESS_AUD": "e565ef8e72f359b4e049a19d97d3fbc8917da5b3500972f5ab0df38a06bafa61"
+    },
+    "d1_databases": [{ "binding": "DB", "database_name": "afterglow-music-preview-db", "database_id": "01aa57c3-ee2a-4d69-8b88-4bd3e161c6c1", "migrations_dir": "migrations" }],
+    "r2_buckets": [{ "binding": "BUCKET", "bucket_name": "afterglow-music-preview-audio" }]
+  },
   "observability": { "enabled": true }
 }

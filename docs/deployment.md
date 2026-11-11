@@ -1,5 +1,13 @@
 # Cloudflare 部署记录
 
+## GitHub 自动部署与分支预览
+
+应用由 Cloudflare Workers Builds 连接 `qwasfun/music` 自动发布。推送 `main` 后，Cloudflare 执行 `pnpm run build` 和 `npx wrangler deploy`。其他分支使用 `pnpm run build` 和 `npx wrangler preview`。`pnpm run deploy` 只执行 `git push origin main`。
+
+2026-11-11 的预览构建 `3f76e902-1fdb-4cb6-8d39-73d0fdc7ca83` 已完成生产构建，在预览命令中因缺少 `previews` 块而失败。现已补齐预览变量及独立绑定，并开启 Preview URLs。预览数据库为 `afterglow-music-preview-db`（`01aa57c3-ee2a-4d69-8b88-4bd3e161c6c1`），R2 为 `afterglow-music-preview-audio`。该数据库已应用 `0001` 至 `0004` 的迁移，分支预览共用这些测试资源。
+
+`OWNER_EMAIL` 存在 Cloudflare 的 Previews Base Secret 中，Access 应用通过 `preview_worker` destination 保护音乐应用的预览，使用现有精确邮箱策略。预览配置以仓库中的 `previews` 为准，参考 [Cloudflare 预览配置](https://developers.cloudflare.com/workers/previews/configuration/)。新迁移需要同步应用到预览数据库。
+
 ## 2026-11-11 · 单文件上传 128 MiB
 
 单文件上限提高到 128 MiB（134,217,728 字节），每个分片为 8 MiB，最大文件分为 16 片。上传提示和前后端错误信息从共用的大小常量生成。代码提交为 `1705627`，独立容量更新分支为 `codex/upload-limit-128mb`。
@@ -48,7 +56,7 @@ Worker 版本 `c2a273af-8dfb-40b6-a3e8-fdbf968f0467` 已发布至 `https://music
 | 身份提供方 | 新建 Music Email OTP，仅用于此应用的允许列表 |
 | 会话有效期 | 720 小时；离线播放使用本机已保存文件 |
 
-生产配置禁用 workers.dev 和预览 URL。公开静态应用壳不包含个人音乐资料；所有云端曲库数据都从受保护接口取得。Worker 验证 Access JWT 的签名、issuer、audience、有效期、必需字段和邮箱白名单，不能仅凭伪造身份请求头访问。
+生产使用已绑定的自定义域名，分支预览通过 Preview URLs 访问。公开静态应用壳不包含个人音乐资料，云端曲库数据从受保护接口取得。Worker 验证 Access JWT 的签名、issuer、audience、有效期、必需字段和邮箱白名单。
 
 音频接口为同源 URL，返回正确 MIME、Content-Length、Accept-Ranges、ETag 与 Content-Range。媒体流不经 Worker 整文件缓冲。手动及自动下载单独请求完整 200 响应，下载完成且字节数一致后写入就绪索引。
 
